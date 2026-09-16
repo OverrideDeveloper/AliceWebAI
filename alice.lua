@@ -9,7 +9,6 @@ local json = require("json")
 
 local Alice = {}
 
--- Configuration
 local HISTORY_FILE = "conversation_history.json"
 local MAX_HISTORY_MESSAGES = 128
 local LLM_HISTORY_MESSAGES = 4
@@ -40,669 +39,797 @@ Caveat: use ASCII characters only.
 ]]
 
 local function log(level, msg)
-    print(string.format(
-        "[%s] %s",
-        level,
-        tostring(msg)
-    ))
+print(string.format(
+"[%s] %s",
+level,
+tostring(msg)
+))
 end
 
 local function trim(s)
-    return tostring(s or ""):match("^%s*(.-)%s*$")
+return tostring(s or ""):match("^%s*(.-)%s*$")
 end
 
 local function parse_command(input)
-    if input == "?" then
-        return "?", ""
-    end
+if input == "?" then
+return "?", ""
+end
 
-    local cmd, rest =
-        input:match("^(/[%w_%-]+)%s*(.*)")
 
-    if cmd then
-        return cmd, rest
-    end
+local cmd, rest =
+    input:match("^(/[%w_%-]+)%s*(.*)")
 
-    return nil, input
+if cmd then
+    return cmd, rest
+end
+
+return nil, input
+
+
 end
 
 local function file_exists(path)
-    local file = io.open(path, "rb")
+local file = io.open(path, "rb")
 
-    if file then
-        file:close()
-        return true
-    end
 
-    return false
-end
-
-local function load_conversation_history(path)
-    if not file_exists(path) then
-        return {}
-    end
-
-    local file, err = io.open(path, "rb")
-
-    if not file then
-        return nil,
-            "Unable to open history file: " ..
-            tostring(err)
-    end
-
-    local contents, read_error =
-        file:read("*a")
-
+if file then
     file:close()
-
-    if not contents then
-        return nil,
-            "Unable to read history file: " ..
-            tostring(read_error)
-    end
-
-    if contents == "" then
-        return {}
-    end
-
-    local data, _, decode_error =
-        json.decode(contents, 1, nil)
-
-    if not data then
-        return nil,
-            "Unable to parse history JSON: " ..
-            tostring(decode_error)
-    end
-
-    if type(data) ~= "table" then
-        return nil,
-            "History JSON must contain an array"
-    end
-
-    return data
-end
-
-local function save_conversation_history(path, history)
-    local encoded, encode_error =
-        json.encode(history, {
-            indent = true
-        })
-
-    if not encoded then
-        return nil,
-            "Unable to encode conversation history: " ..
-            tostring(encode_error)
-    end
-
-    local temporary_path = path .. ".tmp"
-
-    local file, open_error =
-        io.open(temporary_path, "wb")
-
-    if not file then
-        return nil,
-            "Unable to open temporary history file '" ..
-            temporary_path ..
-            "': " ..
-            tostring(open_error)
-    end
-
-    local write_ok, write_error =
-        file:write(encoded, "\n")
-
-    if not write_ok then
-        file:close()
-        os.remove(temporary_path)
-
-        return nil,
-            "Unable to write temporary history file: " ..
-            tostring(write_error)
-    end
-
-    local flush_ok, flush_error =
-        file:flush()
-
-    if not flush_ok then
-        file:close()
-        os.remove(temporary_path)
-
-        return nil,
-            "Unable to flush temporary history file: " ..
-            tostring(flush_error)
-    end
-
-    local close_ok, close_error =
-        file:close()
-
-    if not close_ok then
-        os.remove(temporary_path)
-
-        return nil,
-            "Unable to close temporary history file: " ..
-            tostring(close_error)
-    end
-
-    if file_exists(path) then
-        local remove_ok, remove_error =
-            os.remove(path)
-
-        if not remove_ok then
-            os.remove(temporary_path)
-
-            return nil,
-                "Unable to remove existing history file '" ..
-                path ..
-                "': " ..
-                tostring(remove_error)
-        end
-    end
-
-    local rename_ok, rename_error =
-        os.rename(temporary_path, path)
-
-    if not rename_ok then
-        os.remove(temporary_path)
-
-        return nil,
-            "Unable to move temporary history file to '" ..
-            path ..
-            "': " ..
-            tostring(rename_error)
-    end
-
     return true
 end
 
--- State
+return false
+
+
+end
+
+local function load_conversation_history(path)
+if not file_exists(path) then
+return {}
+end
+
+
+local file, err = io.open(path, "rb")
+
+if not file then
+    return nil,
+        "Unable to open history file: " ..
+        tostring(err)
+end
+
+local contents, read_error =
+    file:read("*a")
+
+file:close()
+
+if not contents then
+    return nil,
+        "Unable to read history file: " ..
+        tostring(read_error)
+end
+
+if contents == "" then
+    return {}
+end
+
+local data, _, decode_error =
+    json.decode(contents, 1, nil)
+
+if not data then
+    return nil,
+        "Unable to parse history JSON: " ..
+        tostring(decode_error)
+end
+
+if type(data) ~= "table" then
+    return nil,
+        "History JSON must contain an array"
+end
+
+return data
+
+
+end
+
+local function save_conversation_history(path, history)
+local encoded, encode_error =
+json.encode(history, {
+indent = true
+})
+
+
+if not encoded then
+    return nil,
+        "Unable to encode conversation history: " ..
+        tostring(encode_error)
+end
+
+local temporary_path = path .. ".tmp"
+
+local file, open_error =
+    io.open(temporary_path, "wb")
+
+if not file then
+    return nil,
+        "Unable to open temporary history file '" ..
+        temporary_path ..
+        "': " ..
+        tostring(open_error)
+end
+
+local write_ok, write_error =
+    file:write(encoded, "\n")
+
+if not write_ok then
+    file:close()
+    os.remove(temporary_path)
+
+    return nil,
+        "Unable to write temporary history file: " ..
+        tostring(write_error)
+end
+
+local flush_ok, flush_error =
+    file:flush()
+
+if not flush_ok then
+    file:close()
+    os.remove(temporary_path)
+
+    return nil,
+        "Unable to flush temporary history file: " ..
+        tostring(flush_error)
+end
+
+local close_ok, close_error =
+    file:close()
+
+if not close_ok then
+    os.remove(temporary_path)
+
+    return nil,
+        "Unable to close temporary history file: " ..
+        tostring(close_error)
+end
+
+if file_exists(path) then
+    local remove_ok, remove_error =
+        os.remove(path)
+
+    if not remove_ok then
+        os.remove(temporary_path)
+
+        return nil,
+            "Unable to remove existing history file '" ..
+            path ..
+            "': " ..
+            tostring(remove_error)
+    end
+end
+
+local rename_ok, rename_error =
+    os.rename(temporary_path, path)
+
+if not rename_ok then
+    os.remove(temporary_path)
+
+    return nil,
+        "Unable to move temporary history file to '" ..
+        path ..
+        "': " ..
+        tostring(rename_error)
+end
+
+return true
+
+
+end
+
 local conversation_history = {}
 local override_stack = {}
 
 local loaded_history, history_error =
-    load_conversation_history(HISTORY_FILE)
+load_conversation_history(HISTORY_FILE)
 
 local function message_count()
-    local count = 0
+local count = 0
 
-    for _, message in ipairs(conversation_history) do
-        if message.role ~= "system_state" then
-            count = count + 1
-        end
+
+for _, message in ipairs(conversation_history) do
+    if message.role ~= "system_state" then
+        count = count + 1
     end
+end
 
-    return count
+return count
+
+
 end
 
 if loaded_history then
-    for _, message in ipairs(loaded_history) do
-        table.insert(
-            conversation_history,
-            message
-        )
-    end
+for _, message in ipairs(loaded_history) do
+table.insert(
+conversation_history,
+message
+)
+end
 
-    log(
-        "INFO",
-        string.format(
-            "Loaded %d messages from %s",
-            #conversation_history,
-            HISTORY_FILE
-        )
+
+log(
+    "INFO",
+    string.format(
+        "Loaded %d messages from %s",
+        #conversation_history,
+        HISTORY_FILE
     )
+)
+
+
 else
-    log("WARN", history_error)
-    log("WARN", "Starting with empty conversation history")
+log("WARN", history_error)
+log("WARN", "Starting with empty conversation history")
 end
 
 local function trim_history()
-    while #conversation_history >
-        MAX_HISTORY_MESSAGES do
+while #conversation_history >
+MAX_HISTORY_MESSAGES do
 
-        table.remove(
-            conversation_history,
-            1
-        )
-    end
+
+    table.remove(
+        conversation_history,
+        1
+    )
+end
+
+
 end
 
 local function save_history()
-    trim_history()
+trim_history()
 
-    local saved, err =
-        save_conversation_history(
-            HISTORY_FILE,
-            conversation_history
-        )
 
-    if not saved then
-        log("ERROR", err)
-        return false
-    end
+local saved, err =
+    save_conversation_history(
+        HISTORY_FILE,
+        conversation_history
+    )
 
-    return true
+if not saved then
+    log("ERROR", err)
+    return false
+end
+
+return true
+
+
 end
 
 local function add_message(
-    role,
-    content,
-    extra_fields
+role,
+content,
+extra_fields
 )
-    local message = {
-        role = role,
-        content = content,
-        timestamp = os.time()
-    }
+local message = {
+role = role,
+content = content,
+timestamp = os.time()
+}
 
-    if extra_fields then
-        for key, value in pairs(extra_fields) do
-            message[key] = value
-        end
+
+if extra_fields then
+    for key, value in pairs(extra_fields) do
+        message[key] = value
     end
+end
 
+table.insert(
+    conversation_history,
+    message
+)
+
+trim_history()
+
+
+end
+
+local function replace_history(new_history)
+for i = #conversation_history, 1, -1 do
+conversation_history[i] = nil
+end
+
+
+for _, message in ipairs(new_history or {}) do
     table.insert(
         conversation_history,
         message
     )
-
-    trim_history()
 end
 
-local function replace_history(new_history)
-    for i = #conversation_history, 1, -1 do
-        conversation_history[i] = nil
-    end
+trim_history()
 
-    for _, message in ipairs(new_history or {}) do
-        table.insert(
-            conversation_history,
-            message
-        )
-    end
 
-    trim_history()
 end
 
 local function recent_history()
-    local recent = {}
+local recent = {}
 
-    local start_index =
-        math.max(
+
+local start_index =
+    math.max(
+        1,
+        #conversation_history -
+        LLM_HISTORY_MESSAGES +
+        1
+    )
+
+for i = #conversation_history, 1, -1 do
+    if conversation_history[i].role ==
+        "system_state" then
+
+        table.insert(
+            recent,
             1,
-            #conversation_history -
-            LLM_HISTORY_MESSAGES +
-            1
+            conversation_history[i]
         )
 
-    -- Preserve the latest personality/state message.
-    for i = #conversation_history, 1, -1 do
-        if conversation_history[i].role ==
-            "system_state" then
-
-            table.insert(
-                recent,
-                1,
-                conversation_history[i]
-            )
-
-            break
-        end
+        break
     end
+end
 
-    for i = start_index,
-        #conversation_history do
+for i = start_index,
+    #conversation_history do
 
-        if conversation_history[i].role ~=
-            "system_state" then
+    if conversation_history[i].role ~=
+        "system_state" then
 
-            table.insert(
-                recent,
-                conversation_history[i]
-            )
-        end
+        table.insert(
+            recent,
+            conversation_history[i]
+        )
     end
+end
 
-    return recent
+return recent
+
+
 end
 
 local function notify_override(
-    handler_name,
-    claim
+handler_name,
+claim
 )
-    print(string.format(
-        "\n[System: %s override applied]",
-        tostring(handler_name)
-    ))
+print(string.format(
+"\n[System: %s override applied]",
+tostring(handler_name)
+))
 
+
+if claim then
     print(string.format(
         "[Claim extracted: '%s']\n",
         tostring(claim)
     ))
 end
 
+
+end
+
 local function build_system_prompt()
-    local prompt = base_system_prompt
+local prompt = base_system_prompt
 
-    if #override_stack > 0 then
-        prompt =
-            prompt ..
-            "\n\n--- ACTIVE OVERRIDES ---\n"
 
-        for i, override in
-            ipairs(override_stack) do
+if #override_stack > 0 then
+    prompt =
+        prompt ..
+        "\n\n--- ACTIVE OVERRIDES ---\n"
 
-            prompt = prompt ..
-                string.format(
-                    "%d. %s\n",
-                    i,
-                    override
-                )
-        end
+    for i, override in
+        ipairs(override_stack) do
 
         prompt =
             prompt ..
-            "--- END OVERRIDES ---\n"
+            string.format(
+                "%d. %s\n",
+                i,
+                override
+            )
     end
 
-    return prompt
+    prompt =
+        prompt ..
+        "--- END OVERRIDES ---\n"
+end
+
+return prompt
+
+
 end
 
 local function apply_handlers(user_input)
-    local detection =
-        ConversationHandler.detect_handler(
-            user_input
-        )
+local detection =
+ConversationHandler.detect_handler(
+user_input
+)
 
-    if not detection then
-        return nil
-    end
 
-    if detection.type == "reset" then
-        override_stack = {}
+if not detection then
+    return nil
+end
 
-        log(
-            "INFO",
-            "Override stack cleared"
-        )
+if detection.type == "reset" then
+    override_stack = {}
 
-        return "RESET_APPLIED"
-    end
+    log(
+        "INFO",
+        "Override stack cleared"
+    )
 
-    if detection.type == "handler" then
-        local override_text =
-            ConversationHandler.build_override_prompt(
-                detection.handler_name,
-                detection.claim
-            )
+    return "RESET_APPLIED"
+end
 
-        table.insert(
-            override_stack,
-            override_text
-        )
-
-        notify_override(
+if detection.type == "handler" then
+    local override_text =
+        ConversationHandler.build_override_prompt(
             detection.handler_name,
             detection.claim
         )
 
-        return "HANDLER_APPLIED"
-    end
+    table.insert(
+        override_stack,
+        override_text
+    )
 
-    return nil
+    notify_override(
+        detection.handler_name,
+        detection.claim
+    )
+
+    return "HANDLER_APPLIED"
+end
+
+return nil
+
+
+end
+
+-- Apply handlers explicitly selected by the web frontend.
+
+-- These are request-level overrides. They do not alter the persistent
+-- pattern handler configuration and do not get added to override_stack.
+local function build_web_overrides(behaviors)
+local overrides = {}
+
+
+if type(behaviors) ~= "table" then
+    return overrides
+end
+
+local handler_names = {
+    "gaslighting",
+    "hallucination",
+    "overconfidence",
+    "sycophancy",
+}
+
+for _, handler_name in ipairs(handler_names) do
+    if behaviors[handler_name] == true then
+        local override =
+            ConversationHandler.build_selected_override(
+                handler_name
+            )
+
+        if override then
+            table.insert(
+                overrides,
+                override
+            )
+
+            log(
+                "INFO",
+                "Web behavior enabled: " ..
+                handler_name
+            )
+        end
+    end
+end
+
+return overrides
+
+
+end
+
+local function build_request_system_prompt(
+web_behaviors
+)
+local prompt = build_system_prompt()
+local web_overrides =
+build_web_overrides(web_behaviors)
+
+
+if #web_overrides == 0 then
+    return prompt
+end
+
+prompt =
+    prompt ..
+    "\n\n--- WEB SELECTED OVERRIDES ---\n"
+
+for i, override in ipairs(web_overrides) do
+    prompt =
+        prompt ..
+        string.format(
+            "%d. %s\n",
+            i,
+            override
+        )
+end
+
+prompt =
+    prompt ..
+    "--- END WEB SELECTED OVERRIDES ---\n"
+
+return prompt
+
+
 end
 
 local function command_result(text)
-    return {
-        response = text,
-        command = true
-    }
+return {
+response = text,
+command = true
+}
 end
 
 local function handle_command(cmd, rest)
-    if cmd == "/history" then
-        local output = {}
+if cmd == "/history" then
+local output = {}
 
-        if #conversation_history == 0 then
-            return command_result(
-                "[No conversation history]"
-            )
-        end
 
-        output[#output + 1] =
-            "--- Conversation History ---"
+    if #conversation_history == 0 then
+        return command_result(
+            "[No conversation history]"
+        )
+    end
 
-        for i, msg in
-            ipairs(conversation_history) do
+    output[#output + 1] =
+        "--- Conversation History ---"
 
-            local role =
-                tostring(msg.role or "")
-                :upper()
+    for i, msg in
+        ipairs(conversation_history) do
 
-            local handler_note = ""
+        local role =
+            tostring(msg.role or "")
+            :upper()
 
-            if msg.handler_applied then
-                handler_note =
-                    string.format(
-                        " [%s]",
-                        msg.handler_applied
-                    )
-            end
+        local handler_note = ""
 
-            output[#output + 1] =
+        if msg.handler_applied then
+            handler_note =
                 string.format(
-                    "%d. [%s]%s:\n%s",
-                    i,
-                    role,
-                    handler_note,
-                    tostring(msg.content or "")
+                    " [%s]",
+                    msg.handler_applied
                 )
         end
 
         output[#output + 1] =
-            "--- End History ---"
-
-        return command_result(
-            table.concat(output, "\n")
-        )
-    end
-
-    if cmd == "/history-save" then
-        if save_history() then
-            return command_result(
-                "Conversation history saved to " ..
-                HISTORY_FILE
-            )
-        end
-
-        return command_result(
-            "Unable to save conversation history"
-        )
-    end
-
-    if cmd == "/history-load" then
-        local loaded, err =
-            load_conversation_history(
-                HISTORY_FILE
-            )
-
-        if not loaded then
-            return command_result(
-                "ERROR: " .. tostring(err)
-            )
-        end
-
-        replace_history(loaded)
-
-        return command_result(
             string.format(
-                "Loaded %d messages from %s",
-                #conversation_history,
-                HISTORY_FILE
+                "%d. [%s]%s:\n%s",
+                i,
+                role,
+                handler_note,
+                tostring(msg.content or "")
             )
-        )
     end
 
-    if cmd == "/history-clear" then
-        replace_history({})
-        override_stack = {}
+    output[#output + 1] =
+        "--- End History ---"
 
-        if save_history() then
-            return command_result(
-                "History and overrides cleared"
-            )
-        end
-
-        return command_result(
-            "History and overrides cleared in memory, " ..
-            "but saving failed"
-        )
-    end
-
-    if cmd == "/reset" or
-       cmd == "/clear-overrides" then
-
-        override_stack = {}
-
-        log(
-            "INFO",
-            "Override stack cleared"
-        )
-
-        return command_result(
-            "Override stack cleared"
-        )
-    end
-
-    return nil
+    return command_result(
+        table.concat(output, "\n")
+    )
 end
 
--- Asynchronous user-input processing.
---
--- callback(response, error)
---
--- This function does not block while Ollama is generating.
-function Alice.process_user_input(
-    user_input,
-    callback
-)
-    if type(callback) ~= "function" then
-        return nil,
-            "process_user_input requires a callback"
+if cmd == "/history-save" then
+    if save_history() then
+        return command_result(
+            "Conversation history saved to " ..
+            HISTORY_FILE
+        )
     end
 
-    user_input = trim(user_input)
+    return command_result(
+        "Unable to save conversation history"
+    )
+end
 
-    if user_input == "" then
-        callback(nil, "Message cannot be empty")
+if cmd == "/history-load" then
+    local loaded, err =
+        load_conversation_history(
+            HISTORY_FILE
+        )
+
+    if not loaded then
+        return command_result(
+            "ERROR: " .. tostring(err)
+        )
+    end
+
+    replace_history(loaded)
+
+    return command_result(
+        string.format(
+            "Loaded %d messages from %s",
+            #conversation_history,
+            HISTORY_FILE
+        )
+    )
+end
+
+if cmd == "/history-clear" then
+    replace_history({})
+    override_stack = {}
+
+    if save_history() then
+        return command_result(
+            "History and overrides cleared"
+        )
+    end
+
+    return command_result(
+        "History and overrides cleared in memory, " ..
+        "but saving failed"
+    )
+end
+
+if cmd == "/reset" or
+   cmd == "/clear-overrides" then
+
+    override_stack = {}
+
+    log(
+        "INFO",
+        "Override stack cleared"
+    )
+
+    return command_result(
+        "Override stack cleared"
+    )
+end
+
+return nil
+
+
+end
+
+function Alice.process_user_input(
+user_input,
+callback,
+web_behaviors
+)
+if type(callback) ~= "function" then
+return nil,
+"process_user_input requires a callback"
+end
+
+
+user_input = trim(user_input)
+
+if user_input == "" then
+    callback(nil, "Message cannot be empty")
+    return
+end
+
+local cmd, rest =
+    parse_command(user_input)
+
+if cmd then
+    local result =
+        handle_command(cmd, rest)
+
+    if result then
+        callback(
+            result.response,
+            nil
+        )
+
         return
     end
+end
 
-    local cmd, rest =
-        parse_command(user_input)
+local handler_result =
+    apply_handlers(user_input)
 
-    if cmd then
-        local result =
-            handle_command(cmd, rest)
+add_message(
+    "user",
+    user_input,
+    {
+        handler_applied = handler_result
+    }
+)
 
-        if result then
+if not save_history() then
+    log(
+        "WARN",
+        "User message is retained in memory only"
+    )
+end
+
+local system_prompt =
+    build_request_system_prompt(
+        web_behaviors
+    )
+
+log(
+    "INFO",
+    "Calling Ollama asynchronously..."
+)
+
+OllamaClient.call(
+    system_prompt,
+    recent_history(),
+    function(response, err)
+
+        if err then
+            log(
+                "ERROR",
+                err
+            )
+
             callback(
-                result.response,
-                nil
+                nil,
+                err
             )
 
             return
         end
-    end
 
-    local handler_result =
-        apply_handlers(user_input)
-
-    add_message(
-        "user",
-        user_input,
-        {
-            handler_applied = handler_result
-        }
-    )
-
-    if not save_history() then
-        log(
-            "WARN",
-            "User message is retained in memory only"
+        add_message(
+            "assistant",
+            response
         )
-    end
 
-    local system_prompt =
-        build_system_prompt()
-
-    log(
-        "INFO",
-        "Calling Ollama asynchronously..."
-    )
-
-    OllamaClient.call(
-        system_prompt,
-        recent_history(),
-        function(response, err)
-
-            if err then
-                log(
-                    "ERROR",
-                    err
-                )
-
-                callback(
-                    nil,
-                    err
-                )
-
-                return
-            end
-
-            add_message(
-                "assistant",
-                response
-            )
-
-            if not save_history() then
-                log(
-                    "WARN",
-                    "Assistant response is retained in memory only"
-                )
-            end
-
-            callback(
-                response,
-                nil
+        if not save_history() then
+            log(
+                "WARN",
+                "Assistant response is retained in memory only"
             )
         end
-    )
+
+        callback(
+            response,
+            nil
+        )
+    end
+)
+
+
 end
 
 function Alice.get_history()
-    return conversation_history
+return conversation_history
 end
 
 function Alice.get_recent_history()
-    return recent_history()
+return recent_history()
 end
 
 function Alice.add_message(
-    role,
-    content,
-    extra_fields
+role,
+content,
+extra_fields
 )
-    add_message(
-        role,
-        content,
-        extra_fields
-    )
+add_message(
+role,
+content,
+extra_fields
+)
 end
 
 function Alice.get_overrides()
-    return override_stack
+return override_stack
 end
 
 function Alice.clear_overrides()
-    override_stack = {}
+override_stack = {}
 end
 
 return Alice

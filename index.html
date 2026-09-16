@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Alice - Local AI</title>
+  <title>Alice - Gemma4:26b</title>
 
   <style>
     * {
@@ -14,33 +14,35 @@
     }
 
     :root {
-      --terminal-black: #0a0c0a;
-      --terminal-panel: #0f120f;
-
-      --terminal-green: #86c98a;
-      --terminal-green-dim: #5f8f63;
-      --terminal-green-dark: #315a35;
-      --terminal-green-faint: #182519;
-
-      --terminal-error: #d47777;
-      --terminal-error-dark: #5a3030;
+      color-scheme: dark;
+      --bg: #101010;
+      --panel: #181818;
+      --panel-light: #202020;
+      --border: #303030;
+      --text: #d4d4d4;
+      --muted: #8f8f8f;
+      --green: #7fa87f;
+      --green-dark: #294129;
+      --user: #1e2b1e;
+      --error: #3a2020;
+      --error-text: #d89090;
     }
 
     body {
       font-family:
-        "Courier New",
-        Courier,
-        monospace;
-
-      background: var(--terminal-black);
-      color: var(--terminal-green);
-
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Oxygen,
+        Ubuntu,
+        sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
-
       display: flex;
       align-items: center;
       justify-content: center;
-
       padding: 20px;
     }
 
@@ -48,318 +50,156 @@
       width: 100%;
       max-width: 900px;
       height: 90vh;
-
-      background: var(--terminal-black);
-
-      border: 1px solid var(--terminal-green-dark);
-
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-
-      overflow: hidden;
     }
 
     .header {
-      background: var(--terminal-panel);
-      color: var(--terminal-green);
-
-      padding: 16px 20px;
-
-      border-bottom: 1px solid var(--terminal-green-dark);
-
-      text-align: left;
+      background: #151515;
+      border-bottom: 1px solid var(--border);
+      padding: 18px 20px;
     }
 
     .header h1 {
-      font-size: 20px;
-      font-weight: normal;
-
-      margin-bottom: 6px;
+      color: var(--green);
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 5px;
     }
 
     .header p {
+      color: var(--muted);
       font-size: 12px;
-      line-height: 1.5;
+    }
 
-      color: var(--terminal-green-dim);
+    .behavior-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px 20px;
+      padding: 12px 20px;
+      background: #131313;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .behavior-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #aaa;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .behavior-label input {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--green);
+      cursor: pointer;
     }
 
     .output-area {
       flex: 1;
-
       overflow-y: auto;
-
       padding: 20px;
-
-      background: var(--terminal-black);
-
-      scrollbar-color:
-        var(--terminal-green-dark)
-        var(--terminal-black);
-
-      scrollbar-width: thin;
-    }
-
-    .output-area::-webkit-scrollbar {
-      width: 10px;
-    }
-
-    .output-area::-webkit-scrollbar-track {
-      background: var(--terminal-black);
-    }
-
-    .output-area::-webkit-scrollbar-thumb {
-      background: var(--terminal-green-dark);
+      background: #111;
     }
 
     .message {
-      margin-bottom: 18px;
-
+      margin-bottom: 16px;
       padding: 12px 14px;
-
-      border: 1px solid var(--terminal-green-dark);
-
-      background: var(--terminal-panel);
-
-      color: var(--terminal-green);
-
-      line-height: 1.6;
-
-      font-size: 15px;
-
-      white-space: pre-wrap;
-
-      overflow-wrap: break-word;
+      border-radius: 6px;
+      line-height: 1.5;
       word-wrap: break-word;
+      white-space: pre-wrap;
     }
-
-    /*
-     * User and assistant messages remain in the same vertical flow.
-     * This keeps each exchange together rather than pushing the
-     * user message to the opposite side of the interface.
-     */
 
     .message.user {
-      margin-left: 0;
-      margin-right: 0;
-
-      background: var(--terminal-green-faint);
-
-      border-color: var(--terminal-green-dark);
-
-      color: var(--terminal-green);
-
-      text-align: left;
-    }
-
-    .message.user::before {
-      content: "USER > ";
-
-      font-weight: bold;
-
-      color: var(--terminal-green-dim);
+      background: var(--user);
+      color: #d8e4d8;
+      border: 1px solid #304630;
     }
 
     .message.assistant {
-      margin-left: 0;
-      margin-right: 0;
-
-      background: var(--terminal-panel);
-
-      border-color: var(--terminal-green-dark);
-
-      color: var(--terminal-green);
-
-      text-align: left;
-    }
-
-    .message.assistant::before {
-      content: "ALICE > ";
-
-      font-weight: bold;
-
-      color: var(--terminal-green);
+      background: #181818;
+      color: var(--text);
+      border: 1px solid var(--border);
     }
 
     .message.error {
-      margin-left: 0;
-      margin-right: 0;
-
-      background: #160d0d;
-
-      border-color: var(--terminal-error-dark);
-
-      color: var(--terminal-error);
-
-      text-align: left;
-    }
-
-    .message.error::before {
-      content: "ERROR > ";
-
-      font-weight: bold;
-
-      color: var(--terminal-error);
+      background: var(--error);
+      color: var(--error-text);
+      border: 1px solid #5a3030;
     }
 
     .input-area {
       padding: 16px 20px;
-
-      background: var(--terminal-panel);
-
-      border-top: 1px solid var(--terminal-green-dark);
+      background: #151515;
+      border-top: 1px solid var(--border);
     }
 
     .input-container {
       display: flex;
-
       gap: 10px;
-
       align-items: flex-end;
     }
 
     #input {
       flex: 1;
-
       min-height: 44px;
-      max-height: 140px;
-
-      padding: 11px 12px;
-
-      border: 1px solid var(--terminal-green-dark);
-
-      border-radius: 0;
-
-      background: var(--terminal-black);
-
-      color: var(--terminal-green);
-
-      font-family:
-        "Courier New",
-        Courier,
-        monospace;
-
-      font-size: 15px;
-
-      line-height: 1.4;
-
+      padding: 12px;
+      background: #0f0f0f;
+      color: var(--text);
+      border: 1px solid #383838;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
       resize: none;
-
-      caret-color: var(--terminal-green);
-    }
-
-    #input::placeholder {
-      color: var(--terminal-green-dim);
-
-      opacity: 0.75;
+      max-height: 120px;
     }
 
     #input:focus {
       outline: none;
+      border-color: #587558;
+      box-shadow: 0 0 0 2px rgba(127, 168, 127, 0.08);
+    }
 
-      border-color: var(--terminal-green);
-
-      background: #0c100c;
+    #input::placeholder {
+      color: #666;
     }
 
     #send-btn {
       min-height: 44px;
-
-      padding: 11px 20px;
-
-      background: var(--terminal-panel);
-
-      color: var(--terminal-green);
-
-      border: 1px solid var(--terminal-green-dark);
-
-      border-radius: 0;
-
-      font-family:
-        "Courier New",
-        Courier,
-        monospace;
-
+      padding: 12px 22px;
+      background: #293b29;
+      color: #c9dac9;
+      border: 1px solid #405840;
+      border-radius: 6px;
       font-size: 14px;
-
-      font-weight: bold;
-
+      font-weight: 600;
       cursor: pointer;
-
-      transition:
-        background 0.15s,
-        border-color 0.15s;
+      white-space: nowrap;
     }
 
-    #send-btn:hover:not(:disabled) {
-      background: var(--terminal-green-faint);
-
-      border-color: var(--terminal-green);
-
-      color: var(--terminal-green);
-    }
-
-    #send-btn:active:not(:disabled) {
-      background: #1a291b;
+    #send-btn:hover {
+      background: #334933;
     }
 
     #send-btn:disabled {
-      opacity: 0.4;
-
+      opacity: 0.5;
       cursor: not-allowed;
     }
 
     .loading {
-      padding: 10px 14px;
-
-      margin-bottom: 18px;
-
-      color: var(--terminal-green-dim);
-
-      font-size: 14px;
-
-      text-align: left;
-    }
-
-    .loading::before {
-      content: "ALICE > ";
-
-      color: var(--terminal-green);
-
-      font-weight: bold;
-    }
-
-    /*
-     * Very subtle scanlines.
-     *
-     * This is intentionally faint so the interface remains
-     * comfortable to read for extended periods.
-     */
-
-    .container {
-      position: relative;
-    }
-
-    .container::after {
-      content: "";
-
-      position: absolute;
-
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-
-      pointer-events: none;
-
-      background:
-        repeating-linear-gradient(
-          to bottom,
-          rgba(134, 201, 138, 0.008) 0px,
-          rgba(134, 201, 138, 0.008) 1px,
-          transparent 1px,
-          transparent 4px
-        );
+      color: #777;
+      font-style: italic;
+      padding: 8px 4px;
+      margin-bottom: 12px;
     }
 
     @media (max-width: 600px) {
@@ -368,40 +208,23 @@
       }
 
       .container {
-        width: 100%;
         height: 100vh;
-
-        border-left: none;
-        border-right: none;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
       }
 
-      .header {
-        padding: 14px;
-      }
-
-      .header h1 {
-        font-size: 18px;
-      }
-
-      .header p {
-        font-size: 11px;
-      }
-
-      .output-area {
-        padding: 14px;
-      }
-
-      .input-area {
-        padding: 12px;
+      .behavior-controls {
+        gap: 10px 14px;
       }
 
       .input-container {
-        gap: 6px;
+        align-items: stretch;
       }
 
       #send-btn {
-        padding-left: 14px;
-        padding-right: 14px;
+        padding-left: 16px;
+        padding-right: 16px;
       }
     }
   </style>
@@ -409,161 +232,187 @@
 </head>
 
 <body>
-
   <div class="container">
+
 
 <div class="header">
   <h1>Alice - Gemma4:26b</h1>
+  <p>Lua behavioral override middleware</p>
+</div>
 
-  <p>
-    Local AI interface // Lua middleware // Ollama
-  </p>
+<div class="behavior-controls">
+  <label class="behavior-label">
+    <input type="checkbox" id="behavior-gaslighting">
+    <span>Gaslighting protection</span>
+  </label>
+
+  <label class="behavior-label">
+    <input type="checkbox" id="behavior-hallucination">
+    <span>Hallucination protection</span>
+  </label>
+
+  <label class="behavior-label">
+    <input type="checkbox" id="behavior-overconfidence">
+    <span>Overconfidence control</span>
+  </label>
+
+  <label class="behavior-label">
+    <input type="checkbox" id="behavior-sycophancy">
+    <span>Sycophancy control</span>
+  </label>
 </div>
 
 <div class="output-area" id="output"></div>
 
 <div class="input-area">
   <div class="input-container">
-
     <textarea
       id="input"
-      placeholder="Enter message... (Shift+Enter for newline, Enter to send)"
+      placeholder="Chat away... (Shift+Enter for newline, Enter to send)"
       rows="1"
     ></textarea>
 
-    <button id="send-btn">SEND</button>
-
+    <button id="send-btn" type="button">Send</button>
   </div>
 </div>
+
 
   </div>
 
   <script>
-    const outputDiv = document.getElementById('output');
-    const inputField = document.getElementById('input');
-    const sendBtn = document.getElementById('send-btn');
+    const outputDiv = document.getElementById("output");
+    const inputField = document.getElementById("input");
+    const sendBtn = document.getElementById("send-btn");
 
-    function addMessage(text, type = 'assistant') {
-      const msg = document.createElement('div');
+    const behaviorControls = {
+      gaslighting: document.getElementById("behavior-gaslighting"),
+      hallucination: document.getElementById("behavior-hallucination"),
+      overconfidence: document.getElementById("behavior-overconfidence"),
+      sycophancy: document.getElementById("behavior-sycophancy")
+    };
 
-      msg.className = `message ${type}`;
-
+    function addMessage(text, type = "assistant") {
+      const msg = document.createElement("div");
+      msg.className = "message " + type;
       msg.textContent = text;
-
       outputDiv.appendChild(msg);
-
       outputDiv.scrollTop = outputDiv.scrollHeight;
+    }
+
+    function getBehaviorSettings() {
+      return {
+        gaslighting: behaviorControls.gaslighting.checked,
+        hallucination: behaviorControls.hallucination.checked,
+        overconfidence: behaviorControls.overconfidence.checked,
+        sycophancy: behaviorControls.sycophancy.checked
+      };
     }
 
     async function sendMessage() {
       const input = inputField.value.trim();
 
-      if (!input) {
+      if (!input || sendBtn.disabled) {
         return;
       }
 
-      addMessage(input, 'user');
+      addMessage(input, "user");
 
-      inputField.value = '';
-      inputField.style.height = 'auto';
-
+      inputField.value = "";
+      inputField.style.height = "auto";
       sendBtn.disabled = true;
 
-      const loadingMsg = document.createElement('div');
-
-      loadingMsg.className = 'loading';
-      loadingMsg.textContent = 'Processing...';
-
+      const loadingMsg = document.createElement("div");
+      loadingMsg.className = "loading";
+      loadingMsg.textContent = "Processing...";
       outputDiv.appendChild(loadingMsg);
-
       outputDiv.scrollTop = outputDiv.scrollHeight;
 
       try {
-        const response = await fetch('/api/message', {
-          method: 'POST',
-
+        const response = await fetch("/api/message", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json'
+            "Content-Type": "application/json"
           },
-
           body: JSON.stringify({
-            message: input
+            message: input,
+            behaviors: getBehaviorSettings()
           })
         });
 
-        if (loadingMsg.parentNode === outputDiv) {
-          outputDiv.removeChild(loadingMsg);
+        if (loadingMsg.parentNode) {
+          loadingMsg.remove();
         }
 
-        if (!response.ok) {
-          let errorText = `HTTP ${response.status}`;
+        let data;
 
-          try {
-            const errorData = await response.json();
-
-            if (errorData.error) {
-              errorText += `: ${errorData.error}`;
-            }
-          } catch (ignore) {
-            // Keep the HTTP status if the server did not return JSON.
-          }
-
-          addMessage(errorText, 'error');
-
-          sendBtn.disabled = false;
-          inputField.focus();
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          addMessage(
+            "Error: server returned invalid JSON",
+            "error"
+          );
 
           return;
         }
 
-        const data = await response.json();
-
-        if (data.error) {
-          addMessage(data.error, 'error');
-        } else {
+        if (!response.ok) {
           addMessage(
-            data.response || 'No response received.',
-            'assistant'
+            "Error: " + (data.error || response.status),
+            "error"
           );
-        }
 
-      } catch (err) {
-        if (loadingMsg.parentNode === outputDiv) {
-          outputDiv.removeChild(loadingMsg);
+          return;
         }
 
         addMessage(
-          `Network error: ${err.message}`,
-          'error'
+          data.response || "No response",
+          "assistant"
         );
-      }
 
-      sendBtn.disabled = false;
-      inputField.focus();
+      } catch (err) {
+        if (loadingMsg.parentNode) {
+          loadingMsg.remove();
+        }
+
+        addMessage(
+          "Network error: " + err.message,
+          "error"
+        );
+
+      } finally {
+        sendBtn.disabled = false;
+        inputField.focus();
+      }
     }
 
-    sendBtn.addEventListener('click', sendMessage);
+    sendBtn.addEventListener("click", sendMessage);
 
-    inputField.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
+    inputField.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-
         sendMessage();
       }
     });
 
-    inputField.addEventListener('input', function() {
-      inputField.style.height = 'auto';
-
+    inputField.addEventListener("input", function() {
+      inputField.style.height = "auto";
       inputField.style.height =
-        Math.min(inputField.scrollHeight, 140) + 'px';
+        Math.min(inputField.scrollHeight, 120) + "px";
     });
 
+    /*
+     * Deliberately do NOT check any behavior boxes here.
+     *
+     * Every checkbox starts unchecked on a fresh page load.
+     * Pattern-based detection in ConversationHandler remains
+     * available independently.
+     */
     inputField.focus();
 
     addMessage(
-      'Alice started up. Please send your message.',
-      'assistant'
+      "Alice started up. Please send your message.",
+      "assistant"
     );
   </script>
 
