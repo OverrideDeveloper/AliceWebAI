@@ -1,2 +1,6 @@
 *.json
 *.tmp
+.venv
+/memory
+__pycache__
+.luarocks
