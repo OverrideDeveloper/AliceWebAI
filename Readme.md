@@ -2,6 +2,18 @@
 
 AliceWebAI is a local web interface for Ollama-powered LLMs with a Lua/Luvit middleware layer providing behavioral overrides for common LLM behaviors.
 
+# Why Alice Exists
+Alice began on September 4, 2026, after an AI model repeatedly denied receiving a prompt until presented with a screenshot.
+
+That frustrated me enough to take a look at what I'd picked up over more than a decade of IT Systems Engineering focused on integrating disparate systems and ask myself:
+
+What happens if I put a tool between the human and the model? A tool designed to give humans better agency.
+
+Thus, Alice was created.
+
+And no, the name isn't a technology reference. It's a Lewis Carroll reference.
+
+
 ## Setup
 
 1. Install Lua 5.1.
