@@ -34,12 +34,14 @@ local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
 local Observability = require("./observability")
 local ResponsePolicy = require("./response_policy")
+local WebSearch = require("./web_search")
 
 local available_tools = {
 MemorySearch.definition,
 MemoryStore.definition,
 CurrentTime.definition,
-DiceRoll.definition
+DiceRoll.definition,
+WebSearch.definition
 }
 
 local Alice = {}
