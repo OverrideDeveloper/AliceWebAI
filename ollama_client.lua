@@ -31,6 +31,7 @@ local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
+local WebSearch = require("./web_search")
 
 local OllamaClient = {}
 
@@ -57,7 +58,10 @@ local ToolHandlers = {
         )
     end,
     current_time = CurrentTime.current_time,
-    dice_roll = DiceRoll.dice_roll
+    dice_roll = DiceRoll.dice_roll,
+    web_search = function(arguments, callback)
+        WebSearch.search(arguments, callback)
+    end,
 }
 
 
@@ -475,6 +479,7 @@ local function execute_tool(
     local asynchronous_tools = {
         memory_search = true,
         memory_store = true,
+        web_search = true,
     }
 
     if asynchronous_tools[tool_name] then
