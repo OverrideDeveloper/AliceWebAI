@@ -33,6 +33,8 @@ Alice remains responsible for:
 
 This bot is intentionally a thin Discord adapter.
 
+Discord interaction identity is passed to Alice as request metadata.
+
 Python 3.8+
 discord.py 2.7+
 """
@@ -69,28 +71,14 @@ ALICE_STATUS_ENDPOINT = (
     ALICE_URL.rstrip("/") + "/api/status"
 )
 
-# How long Discord-side HTTP requests may wait for Alice.
-#
-# Your Ollama client currently allows 120 seconds, so this gives Alice
-# a little additional room to finish before Discord gives up.
 ALICE_TIMEOUT = float(
     os.getenv("ALICE_TIMEOUT", "135")
 )
 
-# Optional development guild.
-#
-# Setting this causes commands to sync immediately to one guild rather
-# than waiting for global command propagation.
-#
-# Example:
-#   ALICE_DISCORD_GUILD_ID=123456789012345678
-#
 DISCORD_GUILD_ID = os.getenv(
     "ALICE_DISCORD_GUILD_ID"
 )
 
-# Discord messages have a maximum length. Alice responses longer than
-# this are split into multiple messages.
 DISCORD_MESSAGE_LIMIT = 2000
 
 
@@ -114,10 +102,7 @@ class AliceBot(commands.Bot):
     def __init__(self) -> None:
         intents = discord.Intents.default()
 
-        # We intentionally do NOT enable message_content.
-        #
-        # Alice is driven through slash/application commands rather than
-        # reading arbitrary Discord channel messages.
+        # Slash/application commands do not require message_content.
         super().__init__(
             command_prefix="!",
             intents=intents,
@@ -183,6 +168,53 @@ bot = AliceBot()
 
 
 # ---------------------------------------------------------------------------
+# Discord identity
+# ---------------------------------------------------------------------------
+
+def get_discord_identity(
+    interaction: discord.Interaction,
+) -> dict:
+    """
+    Build the identity metadata Alice receives for this request.
+
+    Discord has authenticated the interaction at the platform level.
+    The Lua backend receives this as identity metadata.
+
+    This is identity propagation, not a replacement for eventual
+    Cloudflare Access authentication.
+    """
+
+    user = interaction.user
+
+    display_name = getattr(
+        user,
+        "display_name",
+        None,
+    )
+
+    if not isinstance(display_name, str) or not display_name:
+        display_name = user.name
+
+    return {
+        "provider": "discord",
+
+        "user_id": str(
+            user.id
+        ),
+
+        "name": display_name,
+
+        # Standard Discord interactions do not expose the user's
+        # email address to the bot.
+        "email": None,
+
+        "authenticated": True,
+
+        "anonymous": False,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Alice HTTP API
 # ---------------------------------------------------------------------------
 
@@ -214,6 +246,7 @@ async def alice_status() -> dict:
 async def ask_alice(
     message: str,
     *,
+    identity: Optional[dict] = None,
     gaslighting: bool = False,
     hallucination: bool = False,
     overconfidence: bool = False,
@@ -221,6 +254,9 @@ async def ask_alice(
 ) -> str:
     """
     Send a message through the existing Alice Web AI HTTP interface.
+
+    The optional identity object identifies the Discord user who
+    submitted the interaction.
     """
 
     if bot.http_session is None:
@@ -230,6 +266,7 @@ async def ask_alice(
 
     payload = {
         "message": message,
+
         "behaviors": {
             "gaslighting": gaslighting,
             "hallucination": hallucination,
@@ -237,6 +274,9 @@ async def ask_alice(
             "sycophancy": sycophancy,
         },
     }
+
+    if identity is not None:
+        payload["identity"] = identity
 
     async with bot.http_session.post(
         ALICE_MESSAGE_ENDPOINT,
@@ -323,18 +363,80 @@ def split_discord_message(
     return chunks
 
 
+def build_user_turn(
+    identity: dict,
+    message: str,
+) -> str:
+    """
+    Build the visible user side of the interaction.
+
+    This does not attempt to impersonate the Discord user.
+
+    The interaction response remains authored by the bot, while the
+    user's actual Discord identity is represented by the interaction
+    metadata and the visible name/message presentation.
+    """
+
+    name = str(
+        identity.get(
+            "name",
+            "Unknown User",
+        )
+    )
+
+    return (
+        f"**{name}:**\n"
+        f"{message}"
+    )
+
+
+def build_alice_turn(
+    response: str,
+) -> str:
+    """
+    Build Alice's visible side of the interaction.
+    """
+
+    return (
+        f"{response}"
+    )
+
+
 async def send_alice_response(
     interaction: discord.Interaction,
+    user_message: str,
+    identity: dict,
     response: str,
 ) -> None:
     """
-    Send Alice's response, splitting it when necessary.
+    Present the complete conversation turn.
+
+    The user's supplied text is displayed first, followed by Alice's
+    response. Both are delivered through the interaction system, so
+    no additional channel-message permission is required.
+
+    Discord still records the actual interaction as having been invoked
+    by the human Discord account. The bot never attempts to impersonate
+    that account.
     """
 
-    chunks = split_discord_message(response)
+    user_turn = build_user_turn(
+        identity,
+        user_message,
+    )
+
+    await interaction.followup.send(
+        user_turn
+    )
+
+    chunks = split_discord_message(
+        build_alice_turn(response)
+    )
 
     if not chunks:
-        chunks = ["Alice returned an empty response."]
+        chunks = [
+            "Alice returned an empty response."
+        ]
 
     await interaction.followup.send(
         chunks[0]
@@ -364,9 +466,24 @@ async def alice_command(
     """
     Main Alice interaction.
 
-    Example:
+    The Discord user supplies the message through the slash command.
 
-        /alice message: Tell me about the current state of Linux.
+    Alice receives:
+        - the supplied message
+        - the Discord provider
+        - the Discord user ID
+        - the Discord display name
+
+    The completed interaction visibly presents:
+
+        Kram:
+        Hello Alice
+
+        AliceAIAPP:
+        Hello! ...
+
+    The bot does not attempt to create a channel message authored as
+    the human user.
     """
 
     message = message.strip()
@@ -379,17 +496,31 @@ async def alice_command(
 
         return
 
+    identity = get_discord_identity(
+        interaction
+    )
+
+    log.info(
+        "Discord request from %s (%s): %s",
+        identity["name"],
+        identity["user_id"],
+        message,
+    )
+
     await interaction.response.defer(
         thinking=True
     )
 
     try:
         response = await ask_alice(
-            message
+            message,
+            identity=identity,
         )
 
         await send_alice_response(
             interaction,
+            message,
+            identity,
             response,
         )
 
@@ -600,6 +731,17 @@ async def alice_behavior_ask(
 
         return
 
+    identity = get_discord_identity(
+        interaction
+    )
+
+    log.info(
+        "Discord behavior request from %s (%s): %s",
+        identity["name"],
+        identity["user_id"],
+        message,
+    )
+
     await interaction.response.defer(
         thinking=True
     )
@@ -607,6 +749,7 @@ async def alice_behavior_ask(
     try:
         response = await ask_alice(
             message,
+            identity=identity,
             gaslighting=gaslighting,
             hallucination=hallucination,
             overconfidence=overconfidence,
@@ -615,7 +758,24 @@ async def alice_behavior_ask(
 
         await send_alice_response(
             interaction,
+            message,
+            identity,
             response,
+        )
+
+    except asyncio.TimeoutError:
+        await interaction.followup.send(
+            "Alice timed out while waiting for the backend."
+        )
+
+    except aiohttp.ClientError as exc:
+        log.exception(
+            "Behavior-controlled Alice request failed"
+        )
+
+        await interaction.followup.send(
+            "I could not reach Alice Web AI.\n"
+            f"Backend error: {exc}"
         )
 
     except Exception as exc:

@@ -1,8 +1,9 @@
 <!DOCTYPE html>
+
 <!--
 Alice Web AI
 
-Copyright (C) 2026 [Your Name]
+Copyright (C) 2026 Override Development
 
 This file is part of Alice Web AI.
 
@@ -20,6 +21,7 @@ You should have received a copy of the GNU General Public License
 along with Alice Web AI. If not, see
 <https://www.gnu.org/licenses/>.
 -->
+
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -93,6 +95,54 @@ along with Alice Web AI. If not, see
     }
 
     .header p {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .identity-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: #131313;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .identity-title {
+      color: #aaa;
+      font-size: 13px;
+      margin-right: 4px;
+    }
+
+    .identity-btn {
+      padding: 7px 12px;
+      background: #1c1c1c;
+      color: #aaa;
+      border: 1px solid #383838;
+      border-radius: 5px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .identity-btn:hover {
+      background: #252525;
+      color: var(--text);
+    }
+
+    .identity-btn.active {
+      background: var(--green-dark);
+      color: #c9dac9;
+      border-color: #527052;
+    }
+
+    .identity-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .identity-status {
+      margin-left: auto;
       color: var(--muted);
       font-size: 12px;
     }
@@ -234,6 +284,15 @@ along with Alice Web AI. If not, see
         border-right: 0;
       }
 
+      .identity-controls {
+        gap: 8px;
+      }
+
+      .identity-status {
+        width: 100%;
+        margin-left: 0;
+      }
+
       .behavior-controls {
         gap: 10px 14px;
       }
@@ -258,6 +317,41 @@ along with Alice Web AI. If not, see
 <div class="header">
   <h1>Alice - Gemma4:26b</h1>
   <p>Lua behavioral override middleware</p>
+</div>
+
+<div class="identity-controls">
+  <span class="identity-title">Identity:</span>
+
+  <button
+    class="identity-btn"
+    data-identity="mark"
+    type="button"
+  >
+    Mark
+  </button>
+
+  <button
+    class="identity-btn"
+    data-identity="test"
+    type="button"
+  >
+    Test User
+  </button>
+
+  <button
+    class="identity-btn"
+    data-identity="anonymous"
+    type="button"
+  >
+    Anonymous
+  </button>
+
+  <span
+    class="identity-status"
+    id="identity-status"
+  >
+    Loading identity...
+  </span>
 </div>
 
 <div class="behavior-controls">
@@ -300,76 +394,413 @@ along with Alice Web AI. If not, see
   </div>
 
   <script>
-    const outputDiv = document.getElementById("output");
-    const inputField = document.getElementById("input");
-    const sendBtn = document.getElementById("send-btn");
+    const outputDiv =
+      document.getElementById("output");
+
+    const inputField =
+      document.getElementById("input");
+
+    const sendBtn =
+      document.getElementById("send-btn");
+
+    const identityStatus =
+      document.getElementById("identity-status");
+
+    const identityButtons =
+      document.querySelectorAll(".identity-btn");
 
     const behaviorControls = {
-      gaslighting: document.getElementById("behavior-gaslighting"),
-      hallucination: document.getElementById("behavior-hallucination"),
-      overconfidence: document.getElementById("behavior-overconfidence"),
-      sycophancy: document.getElementById("behavior-sycophancy")
+      gaslighting:
+        document.getElementById(
+          "behavior-gaslighting"
+        ),
+
+      hallucination:
+        document.getElementById(
+          "behavior-hallucination"
+        ),
+
+      overconfidence:
+        document.getElementById(
+          "behavior-overconfidence"
+        ),
+
+      sycophancy:
+        document.getElementById(
+          "behavior-sycophancy"
+        )
     };
 
-    function addMessage(text, type = "assistant") {
-      const msg = document.createElement("div");
-      msg.className = "message " + type;
-      msg.textContent = text;
+
+    function addMessage(
+      text,
+      type = "assistant"
+    ) {
+      const msg =
+        document.createElement("div");
+
+      msg.className =
+        "message " + type;
+
+      msg.textContent =
+        String(text);
+
       outputDiv.appendChild(msg);
-      outputDiv.scrollTop = outputDiv.scrollHeight;
+
+      outputDiv.scrollTop =
+        outputDiv.scrollHeight;
     }
+
 
     function getBehaviorSettings() {
       return {
-        gaslighting: behaviorControls.gaslighting.checked,
-        hallucination: behaviorControls.hallucination.checked,
-        overconfidence: behaviorControls.overconfidence.checked,
-        sycophancy: behaviorControls.sycophancy.checked
+        gaslighting:
+          behaviorControls.gaslighting.checked,
+
+        hallucination:
+          behaviorControls.hallucination.checked,
+
+        overconfidence:
+          behaviorControls.overconfidence.checked,
+
+        sycophancy:
+          behaviorControls.sycophancy.checked
       };
     }
 
-    async function sendMessage() {
-      const input = inputField.value.trim();
 
-      if (!input || sendBtn.disabled) {
+    function setActiveIdentity(
+      identityName
+    ) {
+      identityButtons.forEach(
+        function(button) {
+          button.classList.toggle(
+            "active",
+            button.dataset.identity ===
+              identityName
+          );
+        }
+      );
+    }
+
+
+    function getIdentityName(
+      identity
+    ) {
+      identity =
+        identity || {};
+
+      const user =
+        identity.user || {};
+
+      const userId =
+        String(user.id || "")
+          .toLowerCase();
+
+      if (
+        identity.anonymous === true ||
+        userId === "local-anonymous"
+      ) {
+        return "anonymous";
+      }
+
+      if (
+        userId === "local-mark"
+      ) {
+        return "mark";
+      }
+
+      if (
+        userId === "local-test-user"
+      ) {
+        return "test";
+      }
+
+      return null;
+    }
+
+
+    function displayIdentity(
+      identity
+    ) {
+      identity =
+        identity || {};
+
+      const user =
+        identity.user || {};
+
+      const name =
+        user.name || "Anonymous";
+
+      identityStatus.textContent =
+        "Signed in as " + name;
+
+      const identityName =
+        getIdentityName(identity);
+
+      if (identityName) {
+        setActiveIdentity(
+          identityName
+        );
+      }
+      else {
+        identityButtons.forEach(
+          function(button) {
+            button.classList.remove(
+              "active"
+            );
+          }
+        );
+      }
+    }
+
+
+    async function readJsonResponse(
+      response
+    ) {
+      const text =
+        await response.text();
+
+      if (!text) {
+        throw new Error(
+          "Server returned an empty response"
+        );
+      }
+
+      let data;
+
+      try {
+        data =
+          JSON.parse(text);
+      }
+      catch (err) {
+        throw new Error(
+          "Server returned invalid JSON (" +
+          response.status +
+          "): " +
+          text
+        );
+      }
+
+      return data;
+    }
+
+
+    async function loadIdentity() {
+      try {
+        /*
+         * This is the local simulated identity
+         * endpoint. It reads the identity cookie
+         * created by POST /api/identity.
+         */
+        const response =
+          await fetch(
+            "/api/identity",
+            {
+              method: "GET",
+              cache: "no-cache",
+              credentials: "same-origin"
+            }
+          );
+
+        const data =
+          await readJsonResponse(
+            response
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+            response.status
+          );
+        }
+
+        displayIdentity(
+          data.identity
+        );
+
+      }
+      catch (err) {
+        identityStatus.textContent =
+          "Identity unavailable";
+
+        console.error(
+          "Unable to load identity:",
+          err
+        );
+
+        addMessage(
+          "Identity error: " +
+          err.message,
+          "error"
+        );
+      }
+    }
+
+
+    async function selectIdentity(
+      identityName
+    ) {
+      identityButtons.forEach(
+        function(button) {
+          button.disabled = true;
+        }
+      );
+
+      try {
+        /*
+         * This is NOT real authentication.
+         *
+         * local_identity.lua simply selects one
+         * of the predefined local identities and
+         * stores that selection in a cookie.
+         */
+        const response =
+          await fetch(
+            "/api/identity",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+              credentials: "same-origin",
+              body: JSON.stringify({
+                identity:
+                  identityName
+              })
+            }
+          );
+
+        const data =
+          await readJsonResponse(
+            response
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+            response.status
+          );
+        }
+
+        displayIdentity(
+          data.identity
+        );
+
+        const selectedUser =
+          (
+            data.identity &&
+            data.identity.user
+          ) || {};
+
+        addMessage(
+          "Identity changed to " +
+          (
+            selectedUser.name ||
+            "Anonymous"
+          ) +
+          ".",
+          "assistant"
+        );
+
+      }
+      catch (err) {
+        addMessage(
+          "Identity error: " +
+          err.message,
+          "error"
+        );
+
+      }
+      finally {
+        identityButtons.forEach(
+          function(button) {
+            button.disabled = false;
+          }
+        );
+
+        inputField.focus();
+      }
+    }
+
+
+    async function sendMessage() {
+      const input =
+        inputField.value.trim();
+
+      if (
+        !input ||
+        sendBtn.disabled
+      ) {
         return;
       }
 
-      addMessage(input, "user");
+      addMessage(
+        input,
+        "user"
+      );
 
       inputField.value = "";
-      inputField.style.height = "auto";
+
+      inputField.style.height =
+        "auto";
+
       sendBtn.disabled = true;
 
-      const loadingMsg = document.createElement("div");
-      loadingMsg.className = "loading";
-      loadingMsg.textContent = "Processing...";
-      outputDiv.appendChild(loadingMsg);
-      outputDiv.scrollTop = outputDiv.scrollHeight;
+      const loadingMsg =
+        document.createElement("div");
+
+      loadingMsg.className =
+        "loading";
+
+      loadingMsg.textContent =
+        "Processing...";
+
+      outputDiv.appendChild(
+        loadingMsg
+      );
+
+      outputDiv.scrollTop =
+        outputDiv.scrollHeight;
 
       try {
-        const response = await fetch("/api/message", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            message: input,
-            behaviors: getBehaviorSettings()
-          })
-        });
+        const response =
+          await fetch(
+            "/api/message",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+              credentials: "same-origin",
+              body: JSON.stringify({
+                message: input,
+                behaviors:
+                  getBehaviorSettings()
+              })
+            }
+          );
 
-        if (loadingMsg.parentNode) {
+        if (
+          loadingMsg.parentNode
+        ) {
           loadingMsg.remove();
         }
 
         let data;
 
         try {
-          data = await response.json();
-        } catch (parseError) {
+          data =
+            await readJsonResponse(
+              response
+            );
+        }
+        catch (parseError) {
           addMessage(
-            "Error: server returned invalid JSON",
+            "Error: " +
+            parseError.message,
             "error"
           );
 
@@ -378,7 +809,11 @@ along with Alice Web AI. If not, see
 
         if (!response.ok) {
           addMessage(
-            "Error: " + (data.error || response.status),
+            "Error: " +
+            (
+              data.error ||
+              response.status
+            ),
             "error"
           );
 
@@ -386,54 +821,102 @@ along with Alice Web AI. If not, see
         }
 
         addMessage(
-          data.response || "No response",
+          data.response ||
+          "No response",
           "assistant"
         );
 
-      } catch (err) {
-        if (loadingMsg.parentNode) {
+      }
+      catch (err) {
+        if (
+          loadingMsg.parentNode
+        ) {
           loadingMsg.remove();
         }
 
         addMessage(
-          "Network error: " + err.message,
+          "Network error: " +
+          err.message,
           "error"
         );
 
-      } finally {
+      }
+      finally {
         sendBtn.disabled = false;
         inputField.focus();
       }
     }
 
-    sendBtn.addEventListener("click", sendMessage);
 
-    inputField.addEventListener("keydown", function(e) {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
+    identityButtons.forEach(
+      function(button) {
+        button.addEventListener(
+          "click",
+          function() {
+            selectIdentity(
+              button.dataset.identity
+            );
+          }
+        );
       }
-    });
+    );
 
-    inputField.addEventListener("input", function() {
-      inputField.style.height = "auto";
-      inputField.style.height =
-        Math.min(inputField.scrollHeight, 120) + "px";
-    });
+
+    sendBtn.addEventListener(
+      "click",
+      sendMessage
+    );
+
+
+    inputField.addEventListener(
+      "keydown",
+      function(e) {
+        if (
+          e.key === "Enter" &&
+          !e.shiftKey
+        ) {
+          e.preventDefault();
+          sendMessage();
+        }
+      }
+    );
+
+
+    inputField.addEventListener(
+      "input",
+      function() {
+        inputField.style.height =
+          "auto";
+
+        inputField.style.height =
+          Math.min(
+            inputField.scrollHeight,
+            120
+          ) + "px";
+      }
+    );
+
 
     /*
-     * Deliberately do NOT check any behavior boxes here.
+     * Deliberately do NOT check any
+     * behavior boxes here.
      *
-     * Every checkbox starts unchecked on a fresh page load.
-     * Pattern-based detection in ConversationHandler remains
+     * Every checkbox starts unchecked
+     * on a fresh page load.
+     *
+     * Pattern-based detection in
+     * ConversationHandler remains
      * available independently.
      */
+
     inputField.focus();
 
     addMessage(
       "Alice started up. Please send your message.",
       "assistant"
     );
+
+    loadIdentity();
   </script>
 
 </body>

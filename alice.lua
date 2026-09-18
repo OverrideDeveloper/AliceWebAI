@@ -1,22 +1,24 @@
 -- Alice Web AI
---
+
 -- Copyright (C) 2026 Override Development
---
+
 -- This file is part of Alice Web AI.
---
+
 -- Alice Web AI is free software: you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
 -- the Free Software Foundation, either version 3 of the License, or
 -- (at your option) any later version.
---
+--------------------------------------
+
 -- Alice Web AI is distributed in the hope that it will be useful,
 -- but WITHOUT ANY WARRANTY; without even the implied warranty of
 -- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 -- GNU General Public License for more details.
---
+-----------------------------------------------
+
 -- You should have received a copy of the GNU General Public License
 -- along with Alice Web AI. If not, see
--- <https://www.gnu.org/licenses/>.
+-- https://www.gnu.org/licenses/.
 
 -- alice.lua
 -- Alice: Deterministic behavioral override layer for local LLMs
@@ -31,9 +33,9 @@ local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 
 local available_tools = {
-    MemorySearch.definition,
-    MemoryStore.definition,
-    CurrentTime.definition
+MemorySearch.definition,
+MemoryStore.definition,
+CurrentTime.definition
 }
 
 local Alice = {}
@@ -567,34 +569,98 @@ return overrides
 end
 
 local function build_request_system_prompt(
-web_behaviors
+web_behaviors,
+identity
 )
 local prompt = build_system_prompt()
+
+
 local web_overrides =
-build_web_overrides(web_behaviors)
+    build_web_overrides(web_behaviors)
 
-
-if #web_overrides == 0 then
-    return prompt
-end
-
-prompt =
-    prompt ..
-    "\n\n--- WEB SELECTED OVERRIDES ---\n"
-
-for i, override in ipairs(web_overrides) do
+if #web_overrides > 0 then
     prompt =
         prompt ..
-        string.format(
-            "%d. %s\n",
-            i,
-            override
-        )
+        "\n\n--- WEB SELECTED OVERRIDES ---\n"
+
+    for i, override in ipairs(web_overrides) do
+        prompt =
+            prompt ..
+            string.format(
+                "%d. %s\n",
+                i,
+                override
+            )
+    end
+
+    prompt =
+        prompt ..
+        "--- END WEB SELECTED OVERRIDES ---\n"
 end
 
-prompt =
-    prompt ..
-    "--- END WEB SELECTED OVERRIDES ---\n"
+-- Identity is request-scoped. It is supplied by the web server
+-- and is deliberately not stored as global Alice state.
+if type(identity) == "table" then
+    prompt =
+        prompt ..
+        "\n\n--- CURRENT USER IDENTITY ---\n"
+
+    prompt =
+        prompt ..
+        "User ID: " ..
+        tostring(
+            identity.id or
+            identity.user_id or
+            "unknown"
+        ) ..
+        "\n"
+
+    prompt =
+        prompt ..
+        "Name: " ..
+        tostring(
+            identity.name or
+            "Unknown"
+        ) ..
+        "\n"
+
+    if identity.email then
+        prompt =
+            prompt ..
+            "Email: " ..
+            tostring(identity.email) ..
+            "\n"
+    end
+
+    prompt =
+        prompt ..
+        "Provider: " ..
+        tostring(
+            identity.provider or
+            "unknown"
+        ) ..
+        "\n"
+
+    prompt =
+        prompt ..
+        "Authenticated: " ..
+        tostring(
+            identity.authenticated == true
+        ) ..
+        "\n"
+
+    prompt =
+        prompt ..
+        "Anonymous: " ..
+        tostring(
+            identity.anonymous == true
+        ) ..
+        "\n"
+
+    prompt =
+        prompt ..
+        "--- END CURRENT USER IDENTITY ---\n"
+end
 
 return prompt
 
@@ -732,7 +798,8 @@ end
 function Alice.process_user_input(
 user_input,
 callback,
-web_behaviors
+web_behaviors,
+identity
 )
 if type(callback) ~= "function" then
 return nil,
@@ -771,7 +838,27 @@ add_message(
     "user",
     user_input,
     {
-        handler_applied = handler_result
+        handler_applied = handler_result,
+
+        user_id =
+            identity and
+            (identity.id or identity.user_id)
+            or nil,
+
+        user_name =
+            identity and
+            identity.name
+            or nil,
+
+        user_provider =
+            identity and
+            identity.provider
+            or nil,
+
+        anonymous =
+            identity and
+            identity.anonymous == true
+            or true,
     }
 )
 
@@ -784,7 +871,8 @@ end
 
 local system_prompt =
     build_request_system_prompt(
-        web_behaviors
+        web_behaviors,
+        identity
     )
 
 log(
@@ -814,7 +902,23 @@ OllamaClient.call(
 
         add_message(
             "assistant",
-            response
+            response,
+            {
+                user_id =
+                    identity and
+                    (identity.id or identity.user_id)
+                    or nil,
+
+                user_name =
+                    identity and
+                    identity.name
+                    or nil,
+
+                user_provider =
+                    identity and
+                    identity.provider
+                    or nil,
+            }
         )
 
         if not save_history() then
