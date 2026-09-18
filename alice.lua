@@ -32,6 +32,8 @@ local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
+local Observability = require("./observability")
+local ResponsePolicy = require("./response_policy")
 
 local available_tools = {
 MemorySearch.definition,
@@ -877,6 +879,16 @@ local system_prompt =
         identity
     )
 
+local request_context = Observability.new_context({
+    user_id = identity and (identity.id or identity.user_id) or nil,
+    provider = identity and identity.provider or nil,
+})
+
+Observability.log("request_start", request_context, {
+    message_count = message_count(),
+    input_bytes = #user_input,
+})
+
 log(
     "INFO",
     "Calling Ollama asynchronously..."
@@ -889,6 +901,8 @@ OllamaClient.call(
     function(response, err)
 
         if err then
+            Observability.error("request_failed", request_context, err)
+
             log(
                 "ERROR",
                 err
@@ -901,6 +915,16 @@ OllamaClient.call(
 
             return
         end
+
+        local inspected = ResponsePolicy.inspect(response, {
+            web_evidence_used = false,
+        })
+
+        Observability.log("response_inspected", request_context, {
+            response_bytes = #inspected.response,
+            model_certainty_marker = inspected.has_model_certainty_marker,
+            evidence_status = inspected.evidence_status,
+        })
 
         add_message(
             "assistant",
