@@ -5,16 +5,13 @@ local M = {}
 
 local MemoryClient = require("./memory_client")
 
-function M.store(arguments, callback)
-
+function M.store(arguments, callback, source)
     if type(arguments) ~= "table" then
         arguments = {}
     end
 
     local content =
-        tostring(
-            arguments.content or ""
-        )
+        tostring(arguments.content or "")
 
     if content:match("^%s*$") then
         callback(
@@ -24,15 +21,11 @@ function M.store(arguments, callback)
         return
     end
 
-    local source =
-        tostring(
-            arguments.source or "conversation"
-        )
+    source =
+        tostring(source or "unknown")
 
     local category =
-        tostring(
-            arguments.category or "general"
-        )
+        tostring(arguments.category or "general")
 
     MemoryClient.store(
         content,
@@ -62,7 +55,6 @@ function M.store(arguments, callback)
         end
     )
 end
-
 M.definition = {
     type = "function",
 
@@ -81,25 +73,15 @@ M.definition = {
             properties = {
                 content = {
                     type = "string",
-
                     description =
                         "The information Alice should remember."
                 },
 
-                source = {
-                    type = "string",
-
-                    description =
-                        "Where the memory came from, such as conversation, "
-                        .. "note, document, or user."
-                },
-
                 category = {
                     type = "string",
-
                     description =
                         "A category such as architecture, project, "
-                        .. "preference, campaign, or general."
+                        .. "preference, or general."
                 }
             },
 

@@ -42,8 +42,19 @@ OllamaClient.config = {
 }
 
 local ToolHandlers = {
-    memory_search = MemorySearch.search,
-    memory_store = MemoryStore.store,
+    memory_store = function(arguments, callback)
+        MemoryStore.store(
+            arguments,
+            callback,
+            "web"
+        )
+    end,
+    memory_search = function(arguments, callback)
+        MemorySearch.search(
+            arguments,
+            callback
+        )
+    end,
     current_time = CurrentTime.current_time
 }
 
