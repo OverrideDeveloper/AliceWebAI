@@ -29,6 +29,7 @@ local json = require("json")
 
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
+local CurrentTime = require("./current_time")
 
 local OllamaClient = {}
 
@@ -43,6 +44,7 @@ OllamaClient.config = {
 local ToolHandlers = {
     memory_search = MemorySearch.search,
     memory_store = MemoryStore.store,
+    current_time = CurrentTime.current_time
 }
 
 
@@ -453,31 +455,59 @@ local function execute_tool(
             .. "]"
     )
 
-    -- Memory tools are asynchronous.
-    --
-    -- Their callback convention is:
-    --
-    --     callback(result, error)
-    --
-    local ok, immediate_error =
+    ----------------------------------------------------------------
+    -- Asynchronous tools
+    ----------------------------------------------------------------
+
+    local asynchronous_tools = {
+        memory_search = true,
+        memory_store = true,
+    }
+
+    if asynchronous_tools[tool_name] then
+
+        local ok, immediate_error =
+            pcall(
+                tool_func,
+                arguments,
+                function(result, err)
+
+                    if err then
+                        callback(
+                            nil,
+                            tostring(result or err)
+                        )
+                        return
+                    end
+
+                    callback(
+                        result,
+                        nil
+                    )
+                end
+            )
+
+        if not ok then
+            callback(
+                nil,
+                "Exception while executing "
+                    .. tool_name
+                    .. ": "
+                    .. tostring(immediate_error)
+            )
+        end
+
+        return
+    end
+
+    ----------------------------------------------------------------
+    -- Synchronous tools
+    ----------------------------------------------------------------
+
+    local ok, result =
         pcall(
             tool_func,
-            arguments,
-            function(result, err)
-
-                if err then
-                    callback(
-                        nil,
-                        tostring(result or err)
-                    )
-                    return
-                end
-
-                callback(
-                    result,
-                    nil
-                )
-            end
+            arguments
         )
 
     if not ok then
@@ -486,11 +516,16 @@ local function execute_tool(
             "Exception while executing "
                 .. tool_name
                 .. ": "
-                .. tostring(immediate_error)
+                .. tostring(result)
         )
 
         return
     end
+
+    callback(
+        result,
+        nil
+    )
 end
 
 
