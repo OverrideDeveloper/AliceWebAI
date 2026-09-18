@@ -31,11 +31,13 @@ local json = require("json")
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
+local DiceRoll = require("./dice_roll")
 
 local available_tools = {
 MemorySearch.definition,
 MemoryStore.definition,
-CurrentTime.definition
+CurrentTime.definition,
+DiceRoll.definition
 }
 
 local Alice = {}

@@ -30,6 +30,7 @@ local json = require("json")
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
+local DiceRoll = require("./dice_roll")
 
 local OllamaClient = {}
 
@@ -55,7 +56,8 @@ local ToolHandlers = {
             callback
         )
     end,
-    current_time = CurrentTime.current_time
+    current_time = CurrentTime.current_time,
+    dice_roll = DiceRoll.dice_roll
 }
 
 
