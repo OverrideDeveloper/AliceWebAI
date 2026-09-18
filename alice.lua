@@ -26,13 +26,13 @@
 local ConversationHandler = require("conversation_handler")
 local OllamaClient = require("./ollama_client")
 local json = require("json")
--- local MemorySearch = require("memory_search")
--- local MemoryStore = require("memory_store")
+local MemorySearch = require("./memory_search")
+local MemoryStore = require("./memory_store")
 
--- local available_tools = {
---     MemorySearch.definition,
---     MemoryStore.definition,
--- }
+local available_tools = {
+    MemorySearch.definition,
+    MemoryStore.definition,
+}
 
 local Alice = {}
 
@@ -793,6 +793,7 @@ log(
 OllamaClient.call(
     system_prompt,
     recent_history(),
+    available_tools,
     function(response, err)
 
         if err then
