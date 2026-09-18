@@ -32,6 +32,8 @@ local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
+local Observability = require("./observability")
+local ResponsePolicy = require("./response_policy")
 
 local available_tools = {
 MemorySearch.definition,
@@ -889,6 +891,8 @@ OllamaClient.call(
     function(response, err)
 
         if err then
+            Observability.error("request_failed", request_context, err)
+
             log(
                 "ERROR",
                 err
@@ -901,6 +905,16 @@ OllamaClient.call(
 
             return
         end
+
+        local inspected = ResponsePolicy.inspect(response, {
+            web_evidence_used = false,
+        })
+
+        Observability.log("response_inspected", request_context, {
+            response_bytes = #inspected.response,
+            model_certainty_marker = inspected.has_model_certainty_marker,
+            evidence_status = inspected.evidence_status,
+        })
 
         add_message(
             "assistant",
