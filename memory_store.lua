@@ -25,10 +25,19 @@
 local M = {}
 
 local MemoryClient = require("./memory_client")
+local Policy = require("./policy")
 
 function M.store(arguments, callback, source)
     if type(arguments) ~= "table" then
         arguments = {}
+    end
+
+    if not Policy.should_store_memory(arguments) then
+        callback(
+            "Error: memory storage requires explicit user_requested=true or durable=true intent",
+            nil
+        )
+        return
     end
 
     local content =
@@ -103,6 +112,18 @@ M.definition = {
                     description =
                         "A category such as architecture, project, "
                         .. "preference, or general."
+                },
+
+                user_requested = {
+                    type = "boolean",
+                    description =
+                        "Set true only when the human explicitly asked Alice to remember this information."
+                },
+
+                durable = {
+                    type = "boolean",
+                    description =
+                        "Set true only when the information is a durable project fact or decision that policy permits storing."
                 }
             },
 
