@@ -879,6 +879,16 @@ local system_prompt =
         identity
     )
 
+local request_context = Observability.new_context({
+    user_id = identity and (identity.id or identity.user_id) or nil,
+    provider = identity and identity.provider or nil,
+})
+
+Observability.log("request_start", request_context, {
+    message_count = message_count(),
+    input_bytes = #user_input,
+})
+
 log(
     "INFO",
     "Calling Ollama asynchronously..."
