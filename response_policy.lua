@@ -117,7 +117,7 @@ function M.decorate(response, metadata)
         suffix[#suffix + 1] = "No web evidence was retrieved for this response."
     end
 
-    return inspected.response .. "\\n\\n" .. table.concat(suffix, "\\n")
+    return inspected.response .. "\n\n" .. table.concat(suffix, "\n")
 end
 
 return M
