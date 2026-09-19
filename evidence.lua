@@ -13,6 +13,8 @@ M.STATUS = {
     ASSERTED = "asserted",
     VERIFIED = "verified",
     UNAVAILABLE = "unavailable",
+    CONSTRUCTED = "constructed",
+    SYMBOLIC = "symbolic",
 }
 
 function M.new(source, status, content, metadata)
@@ -23,6 +25,29 @@ function M.new(source, status, content, metadata)
         metadata = metadata or {},
         timestamp = os.time(),
     }
+end
+
+function M.claim(content, status, sources, metadata)
+    return M.new(
+        metadata and metadata.source or "model",
+        status or M.STATUS.CONSTRUCTED,
+        content,
+        {
+            sources = sources or {},
+            claim = true,
+            role = metadata and metadata.role or "claim",
+        }
+    )
+end
+
+function M.web_urls(results)
+    local urls = {}
+    for _, result in ipairs(results or {}) do
+        if result.url and result.url ~= "" then
+            urls[#urls + 1] = result.url
+        end
+    end
+    return urls
 end
 
 function M.web_result(result)
