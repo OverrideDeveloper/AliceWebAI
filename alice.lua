@@ -903,7 +903,9 @@ OllamaClient.call(
     function(response, err)
 
         if err then
-            Observability.error("request_failed", request_context, err)
+            Observability.error("request_failed", request_context, err, {
+                max_tool_rounds_exceeded = provenance and provenance.max_tool_rounds_exceeded or false,
+            })
 
             log(
                 "ERROR",
@@ -926,6 +928,10 @@ OllamaClient.call(
             response_bytes = #inspected.response,
             model_certainty_marker = inspected.has_model_certainty_marker,
             evidence_status = inspected.evidence_status,
+            claim_count = #inspected.claims,
+            provenance_theater = inspected.provenance_theater,
+            freshness_gap = inspected.freshness_gap,
+            web_url_count = #inspected.web_urls,
         })
 
         add_message(
