@@ -576,23 +576,53 @@ local function serialize_tool_result(result)
         return ""
     end
 
-    if type(result) == "table" then
+    if type(result) ~= "table" then
+        return tostring(result)
+    end
+
+    -- Tool wrappers may contain multiple representations of the
+    -- same evidence. Only send the model the compact structured
+    -- result it needs to reason over. Keep evidence/rendering
+    -- metadata in the application layer.
+    if result.results then
+        local compact = {
+            query = result.query,
+            results = {},
+        }
+
+        for _, item in ipairs(result.results) do
+            table.insert(
+                compact.results,
+                {
+                    rank = item.rank,
+                    title = item.title,
+                    url = item.url,
+                    snippet = item.snippet,
+                    engine = item.engine,
+                }
+            )
+        end
+
         local encoded, encode_error =
-            json.encode(result)
+            json.encode(compact)
 
         if encoded then
             return encoded
-        end
-
-        if result.rendered then
-            return tostring(result.rendered)
         end
 
         return "Unable to serialize tool result: "
             .. tostring(encode_error)
     end
 
-    return tostring(result)
+    local encoded, encode_error =
+        json.encode(result)
+
+    if encoded then
+        return encoded
+    end
+
+    return "Unable to serialize tool result: "
+        .. tostring(encode_error)
 end
 
 
