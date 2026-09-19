@@ -37,6 +37,10 @@ function M.classify_error(message)
         return "protocol_error"
     end
 
+    if text:match("maximum tool%-call rounds exceeded") then
+        return "max_tool_rounds_exceeded"
+    end
+
     if text:match("unknown tool") or text:match("malformed tool") then
         return "tool_error"
     end
