@@ -593,10 +593,11 @@ local function execute_tool_calls(
     tool_calls,
     index,
     messages,
-    callback
+    callback,
+    metadata
 )
     if index > #tool_calls then
-        callback(nil)
+        callback(nil, metadata)
         return
     end
 
@@ -613,6 +614,29 @@ local function execute_tool_calls(
                     .. tostring(err)
             end
 
+            local function_data = tool_call["function"] or {}
+            local tool_name = function_data.name
+
+            if tool_name == "web_search" and err == nil then
+                metadata.web_evidence_used = true
+
+                if type(result) == "table" then
+                    for _, item in ipairs(result.results or {}) do
+                        if item.url then
+                            metadata.web_urls[#metadata.web_urls + 1] = item.url
+                        end
+                    end
+                end
+
+                metadata.evidence_events[#metadata.evidence_events + 1] =
+                    Evidence.new(
+                        "web_search",
+                        Evidence.STATUS.RETRIEVED,
+                        "Web search tool executed successfully",
+                        {tool_name = tool_name}
+                    )
+            end
+
             table.insert(
                 messages,
                 make_tool_result_message(
@@ -625,7 +649,8 @@ local function execute_tool_calls(
                 tool_calls,
                 index + 1,
                 messages,
-                callback
+                callback,
+                metadata
             )
         end
     )
@@ -637,7 +662,8 @@ local function call_round(
     messages,
     tools,
     round,
-    callback
+    callback,
+    metadata
 )
     local payload = {
         model =
@@ -727,7 +753,8 @@ local function call_round(
 
                 callback(
                     ascii_sanitize(content),
-                    nil
+                    nil,
+                    metadata
                 )
 
                 return
@@ -747,12 +774,13 @@ local function call_round(
                 tool_calls,
                 1,
                 messages,
-                function(tool_error)
+                function(tool_error, tool_metadata)
 
                     if tool_error then
                         callback(
                             nil,
-                            tool_error
+                            tool_error,
+                            tool_metadata or metadata
                         )
                         return
                     end
@@ -763,7 +791,14 @@ local function call_round(
 
                         callback(
                             nil,
-                            "Maximum tool-call rounds exceeded"
+                            "Maximum tool-call rounds exceeded",
+                            {
+                                max_tool_rounds_exceeded = true,
+                                tool_round = round,
+                                web_evidence_used = metadata.web_evidence_used,
+                                web_urls = metadata.web_urls,
+                                evidence_events = metadata.evidence_events,
+                            }
                         )
 
                         return
@@ -774,7 +809,8 @@ local function call_round(
                         messages,
                         tools,
                         round + 1,
-                        callback
+                        callback,
+                        metadata
                     )
                 end
             )
@@ -793,6 +829,12 @@ function OllamaClient.call(
         return nil,
             "OllamaClient.call requires a callback"
     end
+
+    local metadata = {
+        web_evidence_used = false,
+        web_urls = {},
+        evidence_events = {},
+    }
 
     local messages = {
         {
@@ -820,7 +862,8 @@ function OllamaClient.call(
         messages,
         tools,
         1,
-        callback
+        callback,
+        metadata
     )
 end
 
