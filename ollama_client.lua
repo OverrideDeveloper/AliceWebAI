@@ -571,6 +571,31 @@ local function get_tool_calls(
 end
 
 
+local function serialize_tool_result(result)
+    if result == nil then
+        return ""
+    end
+
+    if type(result) == "table" then
+        local encoded, encode_error =
+            json.encode(result)
+
+        if encoded then
+            return encoded
+        end
+
+        if result.rendered then
+            return tostring(result.rendered)
+        end
+
+        return "Unable to serialize tool result: "
+            .. tostring(encode_error)
+    end
+
+    return tostring(result)
+end
+
+
 local function make_tool_result_message(
     tool_call,
     result
@@ -580,9 +605,7 @@ local function make_tool_result_message(
 
     local message = {
         role = "tool",
-        content = tostring(
-            result or ""
-        ),
+        content = serialize_tool_result(result),
     }
 
     if function_data.name then
