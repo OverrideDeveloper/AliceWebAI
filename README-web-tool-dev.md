@@ -67,6 +67,12 @@ Future game implementations should keep authoritative state outside the LLM:
 deck, hands, stacks, pot, turn, phase, wagers, and random results. The model
 should narrate that state rather than invent it.
 
+## Epistemic response pipeline
+
+Responses are inspected as candidate claims rather than assigned one global certainty score. Each candidate claim is represented with a provenance status such as `retrieved` or `constructed`; retrieved claims may carry URLs from actual web-search events. Freshness-sensitive language is flagged when no current web evidence event exists, and claims of external verification are flagged when no matching provenance event exists.
+
+The response policy also emits source URLs from actual retrieval events so provenance is navigable rather than merely asserted.
+
 ## Evidence flow
 
 The intended pipeline is:
@@ -79,3 +85,4 @@ Human
   -> LLM
   -> Alice response inspection
   -> Human
+\n\n## Epi-logic development branch\n\n`epi-logic-dev` extends the web-tool foundations with:\n- end-to-end web evidence metadata from tool execution into response inspection\n- removal of the global `Certainty Level` prompt contract\n- detection of unsupported claims of external verification\n- source URL emission from actual retrieved evidence\n- freshness-gap detection for `today`, `now`, `latest`, and `current` language\n- a dedicated `max_tool_rounds_exceeded` observability category\n- candidate claim-level provenance objects distinguishing retrieved claims from model construction\n
