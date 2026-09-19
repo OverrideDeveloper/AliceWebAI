@@ -32,6 +32,7 @@ local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
 local WebSearch = require("./web_search")
+local Evidence = require("./evidence")
 
 local OllamaClient = {}
 
