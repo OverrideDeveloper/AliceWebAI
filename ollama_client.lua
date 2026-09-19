@@ -36,6 +36,16 @@ local Evidence = require("./evidence")
 
 local OllamaClient = {}
 
+
+local function new_metadata()
+    return {
+        web_evidence_used = false,
+        web_urls = {},
+        evidence_events = {},
+    }
+end
+
+
 OllamaClient.config = {
     model = "gemma4:26b",
     endpoint = "http://127.0.0.1:11434/api/generate",
@@ -596,6 +606,8 @@ local function execute_tool_calls(
     callback,
     metadata
 )
+    metadata = metadata or new_metadata()
+
     if index > #tool_calls then
         callback(nil, metadata)
         return
@@ -665,6 +677,8 @@ local function call_round(
     callback,
     metadata
 )
+    metadata = metadata or new_metadata()
+
     local payload = {
         model =
             OllamaClient.config.model,
@@ -830,11 +844,7 @@ function OllamaClient.call(
             "OllamaClient.call requires a callback"
     end
 
-    local metadata = {
-        web_evidence_used = false,
-        web_urls = {},
-        evidence_events = {},
-    }
+    local metadata = new_metadata()
 
     local messages = {
         {
