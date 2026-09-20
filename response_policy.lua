@@ -85,39 +85,11 @@ end
 
 function M.decorate(response, metadata)
     local inspected = M.inspect(response, metadata)
-    local suffix = {
-        "",
-        "--- ALICE EVIDENCE STATUS ---",
-        "Evidence status: " .. inspected.evidence_status,
-        tostring(#inspected.claims) .. " provisional claims",
-    }
 
-    if inspected.has_model_certainty_marker then
-        suffix[#suffix + 1] = "Legacy certainty marker detected; provenance is authoritative instead."
-    end
-
-    if inspected.provenance_theater then
-        suffix[#suffix + 1] = "WARNING: response claims external verification without a matching evidence event."
-    end
-
-    if inspected.freshness_gap then
-        suffix[#suffix + 1] = "WARNING: response uses freshness-sensitive language without retrieved current evidence."
-    end
-
-    if inspected.web_evidence_used then
-        if #inspected.web_urls > 0 then
-            suffix[#suffix + 1] = "Retrieved sources:"
-            for i, url in ipairs(inspected.web_urls) do
-                suffix[#suffix + 1] = string.format("%d. %s", i, url)
-            end
-        else
-            suffix[#suffix + 1] = "WARNING: web evidence event occurred but supplied source URLs were unavailable."
-        end
-    else
-        suffix[#suffix + 1] = "No web evidence was retrieved for this response."
-    end
-
-    return inspected.response .. "\n\n" .. table.concat(suffix, "\n")
+    -- Keep the full inspection result available to callers for future
+    -- operator/diagnostic output, but do not leak internal epistemic
+    -- diagnostics into the human-facing response.
+    return inspected.response
 end
 
 return M
