@@ -16,7 +16,6 @@ local PROVIDERS = {
         name = "DuckDuckGo",
         host = "html.duckduckgo.com",
         path = "/html/",
-        region_parameter = "kl",
     },
     {
         name = "Mojeek",
