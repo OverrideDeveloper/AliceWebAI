@@ -17,6 +17,8 @@ M.config = {
     timeout = 20,
     max_results = 5,
     region = "us-en",
+    debug = true,
+    debug_body_limit = 4000,
 }
 
 local function html_decode(value)
@@ -137,6 +139,7 @@ local function request(query, callback)
         .. url_encode(M.config.region)
 
     local response_data = {}
+    local response_headers = {}
     local completed = false
 
     local function finish(result, err)
@@ -168,6 +171,8 @@ local function request(query, callback)
                     local status =
                         tonumber(res.statusCode or 0)
 
+                    response_headers = res.headers or {}
+
                     res:on("data", function(chunk)
                         response_data[#response_data + 1] = chunk
                     end)
@@ -196,7 +201,14 @@ local function request(query, callback)
                             return
                         end
 
-                        finish(body, nil)
+                        finish(
+                            {
+                                body = body,
+                                status = status,
+                                headers = response_headers,
+                            },
+                            nil
+                        )
                     end)
                 end
             )
@@ -263,10 +275,28 @@ function M.search(arguments, callback)
         count = 10
     end
 
-    request(query, function(body, err)
+    request(query, function(response, err)
         if err then
             callback(nil, err)
             return
+        end
+
+        local body = response.body or ""
+        local status = tonumber(response.status or 0)
+        local headers = response.headers or {}
+
+        if M.config.debug then
+            local content_type = headers["content-type"] or headers["Content-Type"] or ""
+            print("[DuckDuckGo raw response]")
+            print("  query: " .. query)
+            print("  http_status: " .. tostring(status))
+            print("  content_type: " .. tostring(content_type))
+            print("  body_bytes: " .. tostring(#body))
+            print("  body_preview_bytes: " .. tostring(math.min(#body, M.config.debug_body_limit)))
+            print("  body_preview_begin")
+            print(body:sub(1, M.config.debug_body_limit))
+            print("  body_preview_end")
+            print("[End DuckDuckGo raw response]")
         end
 
         local results =
@@ -287,6 +317,14 @@ function M.search(arguments, callback)
         end
 
         print("[End DuckDuckGo payload]")
+
+        if M.config.debug then
+            print("[DuckDuckGo parser diagnosis]")
+            print("  parser_result_count: " .. tostring(#results))
+            print("  requested_result_count: " .. tostring(count))
+            print("  parser_status: " .. (#results > 0 and "results_found" or "no_results_parsed"))
+            print("[End DuckDuckGo parser diagnosis]")
+        end
 
         callback(
             {
