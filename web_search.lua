@@ -80,6 +80,20 @@ function M.search(arguments, callback)
         return
     end
 
+    local count =
+        tonumber(arguments.count or M.config.max_results)
+        or M.config.max_results
+
+    count = math.floor(count)
+
+    if count < 1 then
+        count = 1
+    elseif count > 10 then
+        count = 10
+    end
+
+    engine.max_results = count
+
     engine:search(
         tostring(arguments.query or ""),
         function(result)
