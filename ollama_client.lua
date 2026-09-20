@@ -42,6 +42,8 @@ local function new_metadata()
         web_evidence_used = false,
         web_urls = {},
         evidence_events = {},
+        web_search_attempts = 0,
+        web_search_queries = {},
     }
 end
 
