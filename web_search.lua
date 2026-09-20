@@ -499,6 +499,9 @@ function M.search(arguments, callback)
     try_provider(nil)
 end
 
+M._classify_response = classify_response
+M._parse_results = parse_results
+
 M.definition = {
     type = "function",
     ["function"] = {
