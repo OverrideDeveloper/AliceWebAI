@@ -445,11 +445,35 @@ function M.search(arguments, callback)
         count = 10
     end
 
+    local requested_provider =
+        tostring(arguments.provider or "auto")
+            :lower()
+
+    local providers = PROVIDERS
+
+    if requested_provider ~= "auto" then
+        providers = {}
+        for _, provider in ipairs(PROVIDERS) do
+            if provider.name:lower() == requested_provider then
+                providers[#providers + 1] = provider
+                break
+            end
+        end
+
+        if #providers == 0 then
+            callback(nil, {
+                category = "provider_unavailable",
+                message = "Unknown web search provider: " .. requested_provider,
+            })
+            return
+        end
+    end
+
     local provider_index = 1
 
     local function try_provider(last_error)
         if provider_index > M.config.max_provider_attempts
-            or provider_index > #PROVIDERS then
+            or provider_index > #providers then
             callback(
                 nil,
                 {
@@ -464,7 +488,7 @@ function M.search(arguments, callback)
             return
         end
 
-        local provider = PROVIDERS[provider_index]
+        local provider = providers[provider_index]
         provider_index = provider_index + 1
 
         print(
@@ -522,6 +546,11 @@ M.definition = {
                 count = {
                     type = "integer",
                     description = "Number of results from 1 to 10. Defaults to 5."
+                },
+                provider = {
+                    type = "string",
+                    enum = {"auto", "duckduckgo", "mojeek"},
+                    description = "Search provider. Defaults to auto, which allows fallback."
                 }
             },
             required = {"query"}
