@@ -56,17 +56,10 @@ OllamaClient.config = {
 
 local ToolHandlers = {
     memory_store = function(arguments, callback)
-        MemoryStore.store(
-            arguments,
-            callback,
-            "web"
-        )
+        MemoryStore.store(arguments, callback, "web")
     end,
     memory_search = function(arguments, callback)
-        MemorySearch.search(
-            arguments,
-            callback
-        )
+        MemorySearch.search(arguments, callback)
     end,
     current_time = CurrentTime.current_time,
     dice_roll = DiceRoll.dice_roll,
@@ -764,6 +757,10 @@ local function call_round(
             round
         )
     )
+
+    print("[Ollama request payload]")
+    print(json_payload)
+    print("[End Ollama request payload]")
 
     make_request(
         OllamaClient.config.chat_endpoint,
