@@ -99,7 +99,86 @@ local function normalize_result_url(href)
     return href
 end
 
-local function parse_results(body, max_results)
+local function classify_response(provider_name, body)
+    local lower = tostring(body or ""):lower()
+
+    if provider_name == "DuckDuckGo"
+        and (
+            lower:find("anomaly-modal__title", 1, true)
+            or lower:find("unfortunately, bots use duckduckgo too", 1, true)
+            or lower:find("confirm this search was made by a human", 1, true)
+        ) then
+        return "access_challenge"
+    end
+
+    return "search_page"
+end
+
+local function make_result(provider_name, rank, href, title, snippet)
+    return {
+        rank = rank,
+        title = html_to_text(title),
+        url = normalize_result_url(href),
+        snippet = html_to_text(snippet or ""),
+        engine = provider_name,
+        provider = provider_name,
+    }
+end
+
+local function parse_mojeek(body, max_results)
+    local results = {}
+
+    for block in body:gmatch(
+        '<li[^>]-class="[^"]*result[^"]*"[^>]*>(.-)</li>'
+    ) do
+        local href, title =
+            block:match(
+                '<h2[^>]*>.-<a[^>]-href="([^"]+)"[^>]*>(.-)</a>.-</h2>'
+            )
+
+        if not href then
+            href, title =
+                block:match(
+                    '<a[^>]-class="ob"[^>]-href="([^"]+)"[^>]*>(.-)</a>'
+                )
+        end
+
+        if href and title then
+            local snippet =
+                block:match(
+                    '<p[^>]-class="[^"]*s[^"]*"[^>]*>(.-)</p>'
+                )
+
+            results[#results + 1] =
+                make_result("Mojeek", #results + 1, href, title, snippet)
+
+            if #results >= max_results then
+                break
+            end
+        end
+    end
+
+    if #results == 0 then
+        for href, title in body:gmatch(
+            '<a[^>]-class="ob"[^>]-href="([^"]+)"[^>]*>(.-)</a>'
+        ) do
+            results[#results + 1] =
+                make_result("Mojeek", #results + 1, href, title, "")
+
+            if #results >= max_results then
+                break
+            end
+        end
+    end
+
+    return results
+end
+
+local function parse_results(body, max_results, provider_name)
+    if provider_name == "Mojeek" then
+        return parse_mojeek(body, max_results)
+    end
+
     local results = {}
 
     for block in body:gmatch('<div[^>]-class="result[^"]*"[^>]*>(.-)</div>%s*</div>') do
@@ -115,7 +194,8 @@ local function parse_results(body, max_results)
                 title = html_to_text(title),
                 url = normalize_result_url(href),
                 snippet = html_to_text(snippet or ""),
-                engine = "DuckDuckGo",
+                engine = provider_name or "DuckDuckGo",
+                provider = provider_name or "DuckDuckGo",
             }
 
             if #results >= max_results then
