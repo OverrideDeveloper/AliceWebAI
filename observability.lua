@@ -29,6 +29,10 @@ function M.classify_error(message)
         return "timeout"
     end
 
+    if text:match("provider_unavailable") then
+        return "provider_unavailable"
+    end
+
     if text:match("http %d") then
         return "http_error"
     end
