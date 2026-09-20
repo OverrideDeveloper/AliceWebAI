@@ -817,8 +817,12 @@ local function humanize_failure(message, provenance)
         return "Oh dear. I tried my best, but the search service returned an HTTP error before I could get a reliable result."
     end
 
+    if category == "model_empty_response" then
+        return "Oh dear. I tried my best, but the model stopped responding before I could finish that request."
+    end
+
     if category == "empty_response" then
-        return "Oh dear. I tried my best, but the search service returned no usable response."
+        return "Oh dear. I tried my best, but I did not receive a usable response."
     end
 
     return "Oh dear. I tried my best, but I could not complete that request reliably."
