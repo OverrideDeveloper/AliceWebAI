@@ -89,7 +89,7 @@ function M.decorate(response, metadata)
         "",
         "--- ALICE EVIDENCE STATUS ---",
         "Evidence status: " .. inspected.evidence_status,
-        "Claim provenance: " .. tostring(#inspected.claims) .. " candidate claims classified.",
+        tostring(#inspected.claims) .. " provisional claims",
     }
 
     if inspected.has_model_certainty_marker then
