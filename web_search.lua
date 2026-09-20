@@ -11,6 +11,21 @@ local Evidence = require("./evidence")
 
 local M = {}
 
+local PROVIDERS = {
+    {
+        name = "DuckDuckGo",
+        host = "html.duckduckgo.com",
+        path = "/html/",
+        region_parameter = "kl",
+    },
+    {
+        name = "Mojeek",
+        host = "www.mojeek.com",
+        path = "/search",
+        region_parameter = nil,
+    },
+}
+
 M.config = {
     host = "html.duckduckgo.com",
     path = "/html/",
@@ -19,6 +34,8 @@ M.config = {
     region = "us-en",
     debug = true,
     debug_body_limit = 4000,
+    max_provider_attempts = 2,
+    provider = "auto",
 }
 
 local function html_decode(value)
