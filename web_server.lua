@@ -29,6 +29,8 @@ local json = require("json")
 local fs = require("fs")
 local alice = require("./alice")
 local auth = require("./local_identity")
+local Observability = require("./observability")
+local Policy = require("./policy")
 
 local HOST = "127.0.0.1"
 local PORT = 8080
@@ -576,9 +578,23 @@ local function handle_message(req, res)
                     data.behaviors
                 )
 
+            local request_id = Observability.new_request_id()
+            local request_context = Observability.new_context({
+                request_id = request_id,
+                user_id = identity and identity.user_id or nil,
+                provider = identity and identity.provider or nil,
+            })
+
             print(
                 "[INFO] Processing web message..."
             )
+
+            Observability.log("http_message", request_context, {
+                method = req.method,
+                path = req.url,
+                input_bytes = #input,
+                identity_status = Policy.identity_status(identity),
+            })
 
             print(
                 "[INFO] Identity: " ..
@@ -598,14 +614,16 @@ local function handle_message(req, res)
                 function(response, err)
 
                     if err then
+                        Observability.error("http_message_failed", request_context, err)
+
                         print(
                             "[ERROR] " ..
                             tostring(err)
                         )
 
                         send_json(res, 502, {
-                            error =
-                                tostring(err)
+                            error = tostring(err),
+                            request_id = request_id,
                         })
 
                         return
@@ -615,8 +633,13 @@ local function handle_message(req, res)
                         "[INFO] Ollama response returned"
                     )
 
+                    Observability.log("http_message_completed", request_context, {
+                        response_bytes = #(response or ""),
+                    })
+
                     send_json(res, 200, {
                         response = response,
+                        request_id = request_id,
 
                         user = {
                             id =

@@ -101,9 +101,20 @@ function M.dice_roll(arguments)
     seed_random()
 
     local total = dice.modifier
+    local rolls = {}
 
     for i = 1, dice.count do
-        total = total + math.random(1, dice.sides)
+        local roll = math.random(1, dice.sides)
+        rolls[#rolls + 1] = roll
+        total = total + roll
+    end
+
+    if arguments.individual == true then
+        return {
+            expression = dice.expression,
+            rolls = rolls,
+            total = total,
+        }
     end
 
     return tostring(total)
