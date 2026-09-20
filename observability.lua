@@ -53,7 +53,11 @@ function M.classify_error(message)
         return "tool_error"
     end
 
-    if text:match("empty response") or text:match("no response") then
+    if text:match("no response from model") then
+        return "model_empty_response"
+    end
+
+    if text:match("empty response") then
         return "empty_response"
     end
 
