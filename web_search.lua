@@ -497,7 +497,6 @@ function M.search(arguments, callback)
     end
 
     try_provider(nil)
-    end)
 end
 
 M.definition = {
