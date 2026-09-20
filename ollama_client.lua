@@ -669,9 +669,20 @@ local function execute_tool_calls(
         function(result, err)
 
             if err then
-                result =
-                    "Tool error: "
-                    .. tostring(err)
+                if type(err) == "table" then
+                    local encoded = json.encode({
+                        error = err.category,
+                        message = err.message,
+                        provider = err.provider,
+                        attempts = err.attempts,
+                    })
+                    result = encoded
+                        or ("Tool error: " .. tostring(err.message))
+                else
+                    result =
+                        "Tool error: "
+                        .. tostring(err)
+                end
             end
 
             local function_data = tool_call["function"] or {}
