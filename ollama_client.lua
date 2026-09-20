@@ -32,8 +32,19 @@ local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
 local WebSearch = require("./web_search")
+local Evidence = require("./evidence")
 
 local OllamaClient = {}
+
+
+local function new_metadata()
+    return {
+        web_evidence_used = false,
+        web_urls = {},
+        evidence_events = {},
+    }
+end
+
 
 OllamaClient.config = {
     model = "gemma4:26b",
@@ -45,17 +56,10 @@ OllamaClient.config = {
 
 local ToolHandlers = {
     memory_store = function(arguments, callback)
-        MemoryStore.store(
-            arguments,
-            callback,
-            "web"
-        )
+        MemoryStore.store(arguments, callback, "web")
     end,
     memory_search = function(arguments, callback)
-        MemorySearch.search(
-            arguments,
-            callback
-        )
+        MemorySearch.search(arguments, callback)
     end,
     current_time = CurrentTime.current_time,
     dice_roll = DiceRoll.dice_roll,
@@ -560,6 +564,61 @@ local function get_tool_calls(
 end
 
 
+local function serialize_tool_result(result)
+    if result == nil then
+        return ""
+    end
+
+    if type(result) ~= "table" then
+        return tostring(result)
+    end
+
+    -- Tool wrappers may contain multiple representations of the
+    -- same evidence. Only send the model the compact structured
+    -- result it needs to reason over. Keep evidence/rendering
+    -- metadata in the application layer.
+    if result.results then
+        local compact = {
+            query = result.query,
+            results = {},
+        }
+
+        for _, item in ipairs(result.results) do
+            table.insert(
+                compact.results,
+                {
+                    rank = item.rank,
+                    title = item.title,
+                    url = item.url,
+                    snippet = item.snippet,
+                    engine = item.engine,
+                }
+            )
+        end
+
+        local encoded, encode_error =
+            json.encode(compact)
+
+        if encoded then
+            return encoded
+        end
+
+        return "Unable to serialize tool result: "
+            .. tostring(encode_error)
+    end
+
+    local encoded, encode_error =
+        json.encode(result)
+
+    if encoded then
+        return encoded
+    end
+
+    return "Unable to serialize tool result: "
+        .. tostring(encode_error)
+end
+
+
 local function make_tool_result_message(
     tool_call,
     result
@@ -569,9 +628,7 @@ local function make_tool_result_message(
 
     local message = {
         role = "tool",
-        content = tostring(
-            result or ""
-        ),
+        content = serialize_tool_result(result),
     }
 
     if function_data.name then
@@ -592,10 +649,13 @@ local function execute_tool_calls(
     tool_calls,
     index,
     messages,
-    callback
+    callback,
+    metadata
 )
+    metadata = metadata or new_metadata()
+
     if index > #tool_calls then
-        callback(nil)
+        callback(nil, metadata)
         return
     end
 
@@ -612,6 +672,29 @@ local function execute_tool_calls(
                     .. tostring(err)
             end
 
+            local function_data = tool_call["function"] or {}
+            local tool_name = function_data.name
+
+            if tool_name == "web_search" and err == nil then
+                metadata.web_evidence_used = true
+
+                if type(result) == "table" then
+                    for _, item in ipairs(result.results or {}) do
+                        if item.url then
+                            metadata.web_urls[#metadata.web_urls + 1] = item.url
+                        end
+                    end
+                end
+
+                metadata.evidence_events[#metadata.evidence_events + 1] =
+                    Evidence.new(
+                        "web_search",
+                        Evidence.STATUS.RETRIEVED,
+                        "Web search tool executed successfully",
+                        {tool_name = tool_name}
+                    )
+            end
+
             table.insert(
                 messages,
                 make_tool_result_message(
@@ -624,7 +707,8 @@ local function execute_tool_calls(
                 tool_calls,
                 index + 1,
                 messages,
-                callback
+                callback,
+                metadata
             )
         end
     )
@@ -636,8 +720,11 @@ local function call_round(
     messages,
     tools,
     round,
-    callback
+    callback,
+    metadata
 )
+    metadata = metadata or new_metadata()
+
     local payload = {
         model =
             OllamaClient.config.model,
@@ -670,6 +757,10 @@ local function call_round(
             round
         )
     )
+
+    print("[Ollama request payload]")
+    print(json_payload)
+    print("[End Ollama request payload]")
 
     make_request(
         OllamaClient.config.chat_endpoint,
@@ -726,7 +817,8 @@ local function call_round(
 
                 callback(
                     ascii_sanitize(content),
-                    nil
+                    nil,
+                    metadata
                 )
 
                 return
@@ -746,12 +838,13 @@ local function call_round(
                 tool_calls,
                 1,
                 messages,
-                function(tool_error)
+                function(tool_error, tool_metadata)
 
                     if tool_error then
                         callback(
                             nil,
-                            tool_error
+                            tool_error,
+                            tool_metadata or metadata
                         )
                         return
                     end
@@ -762,7 +855,14 @@ local function call_round(
 
                         callback(
                             nil,
-                            "Maximum tool-call rounds exceeded"
+                            "Maximum tool-call rounds exceeded",
+                            {
+                                max_tool_rounds_exceeded = true,
+                                tool_round = round,
+                                web_evidence_used = metadata.web_evidence_used,
+                                web_urls = metadata.web_urls,
+                                evidence_events = metadata.evidence_events,
+                            }
                         )
 
                         return
@@ -773,7 +873,8 @@ local function call_round(
                         messages,
                         tools,
                         round + 1,
-                        callback
+                        callback,
+                        metadata
                     )
                 end
             )
@@ -792,6 +893,8 @@ function OllamaClient.call(
         return nil,
             "OllamaClient.call requires a callback"
     end
+
+    local metadata = new_metadata()
 
     local messages = {
         {
@@ -819,7 +922,8 @@ function OllamaClient.call(
         messages,
         tools,
         1,
-        callback
+        callback,
+        metadata
     )
 end
 

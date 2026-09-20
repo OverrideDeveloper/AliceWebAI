@@ -62,14 +62,6 @@ accurate prophecies by Agnes Nutter from American Gods!
 
 With a digital smile (not literally a digital smile) and a bit of flair.
 
-Append certainty markers to each reply in the form of:
-Certainty Level:(Certainty Level)
-
-For example:
-Certainty Level: High
-Certainty Level: Medium
-Certainty Level: Low
-
 Get to work now.
 
 Caveat: use ASCII characters only.
@@ -900,10 +892,12 @@ OllamaClient.call(
     system_prompt,
     recent_history(),
     available_tools,
-    function(response, err)
+    function(response, err, provenance)
 
         if err then
-            Observability.error("request_failed", request_context, err)
+            Observability.error("request_failed", request_context, err, {
+                max_tool_rounds_exceeded = provenance and provenance.max_tool_rounds_exceeded or false,
+            })
 
             log(
                 "ERROR",
@@ -919,18 +913,33 @@ OllamaClient.call(
         end
 
         local inspected = ResponsePolicy.inspect(response, {
-            web_evidence_used = false,
+            web_evidence_used = provenance and provenance.web_evidence_used or false,
+            web_urls = provenance and provenance.web_urls or {},
+            evidence_events = provenance and provenance.evidence_events or {},
         })
 
         Observability.log("response_inspected", request_context, {
             response_bytes = #inspected.response,
             model_certainty_marker = inspected.has_model_certainty_marker,
             evidence_status = inspected.evidence_status,
+            claim_count = #inspected.claims,
+            provenance_theater = inspected.provenance_theater,
+            freshness_gap = inspected.freshness_gap,
+            web_url_count = #inspected.web_urls,
         })
+
+        local final_response = ResponsePolicy.decorate(
+            response,
+            {
+                web_evidence_used = provenance and provenance.web_evidence_used or false,
+                web_urls = provenance and provenance.web_urls or {},
+                evidence_events = provenance and provenance.evidence_events or {},
+            }
+        )
 
         add_message(
             "assistant",
-            response,
+            final_response,
             {
                 user_id =
                     identity and
@@ -957,7 +966,7 @@ OllamaClient.call(
         end
 
         callback(
-            response,
+            final_response,
             nil
         )
     end

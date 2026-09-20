@@ -272,6 +272,22 @@ function M.search(arguments, callback)
         local results =
             parse_results(body, count)
 
+        print("[DuckDuckGo payload]")
+        print("  query: " .. query)
+        print("  result_count: " .. tostring(#results))
+
+        for _, result in ipairs(results) do
+            print(string.format(
+                "  [%d] %s | %s | %s",
+                result.rank,
+                result.title,
+                result.url,
+                result.snippet
+            ))
+        end
+
+        print("[End DuckDuckGo payload]")
+
         callback(
             {
                 query = query,
