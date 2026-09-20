@@ -227,13 +227,19 @@ local function parse_results(body, max_results, provider_name)
     return results
 end
 
-local function request(query, callback)
+local function request(provider, query, callback)
     local path =
-        M.config.path
+        provider.path
         .. "?q="
         .. url_encode(query)
-        .. "&kl="
-        .. url_encode(M.config.region)
+
+    if provider.region_parameter then
+        path = path
+            .. "&"
+            .. provider.region_parameter
+            .. "="
+            .. url_encode(M.config.region)
+    end
 
     local response_data = {}
     local response_headers = {}
@@ -252,7 +258,7 @@ local function request(query, callback)
         pcall(function()
             return https.request(
                 {
-                    host = M.config.host,
+                    host = provider.host,
                     port = 443,
                     path = path,
                     method = "GET",
@@ -346,6 +352,73 @@ local function request(query, callback)
     req:done()
 end
 
+local function build_search_result(provider_name, query, results)
+    local items = {}
+    for _, result in ipairs(results or {}) do
+        items[#items + 1] = Evidence.web_result(result)
+    end
+
+    return {
+        query = query,
+        engine = provider_name,
+        provider = provider_name,
+        results = results,
+        evidence = Evidence.encode(items),
+        rendered = Evidence.render_web_results(results),
+    }
+end
+
+local function search_provider(provider, query, count, callback)
+    request(provider, query, function(response, err)
+        if err then
+            callback(nil, err)
+            return
+        end
+
+        local body = response.body or ""
+        local response_type = classify_response(provider.name, body)
+
+        if M.config.debug then
+            local headers = response.headers or {}
+            local content_type = headers["content-type"] or headers["Content-Type"] or ""
+            print("[" .. provider.name .. " response]")
+            print("  query: " .. query)
+            print("  http_status: " .. tostring(response.status or 0))
+            print("  content_type: " .. tostring(content_type))
+            print("  body_bytes: " .. tostring(#body))
+            print("  response_type: " .. response_type)
+            print("  body_preview_begin")
+            print(body:sub(1, M.config.debug_body_limit))
+            print("  body_preview_end")
+            print("[End " .. provider.name .. " response]")
+        end
+
+        if response_type ~= "search_page" then
+            callback(nil, {
+                category = response_type,
+                provider = provider.name,
+                message = provider.name .. " returned an access challenge",
+            })
+            return
+        end
+
+        local results = parse_results(body, count, provider.name)
+
+        print("[" .. provider.name .. " payload]")
+        print("  query: " .. query)
+        print("  result_count: " .. tostring(#results))
+        for _, result in ipairs(results) do
+            print(string.format(
+                "  [%d] %s | %s | %s",
+                result.rank, result.title, result.url, result.snippet
+            ))
+        end
+        print("[End " .. provider.name .. " payload]")
+
+        callback(build_search_result(provider.name, query, results), nil)
+    end)
+end
+
 function M.search(arguments, callback)
     arguments = arguments or {}
 
@@ -372,77 +445,58 @@ function M.search(arguments, callback)
         count = 10
     end
 
-    request(query, function(response, err)
-        if err then
-            callback(nil, err)
+    local provider_index = 1
+
+    local function try_provider(last_error)
+        if provider_index > M.config.max_provider_attempts
+            or provider_index > #PROVIDERS then
+            callback(
+                nil,
+                {
+                    category = last_error and last_error.category
+                        or "provider_unavailable",
+                    message = last_error and last_error.message
+                        or "All configured web search providers failed",
+                    provider = last_error and last_error.provider or nil,
+                    attempts = provider_index - 1,
+                }
+            )
             return
         end
 
-        local body = response.body or ""
-        local status = tonumber(response.status or 0)
-        local headers = response.headers or {}
+        local provider = PROVIDERS[provider_index]
+        provider_index = provider_index + 1
 
-        if M.config.debug then
-            local content_type = headers["content-type"] or headers["Content-Type"] or ""
-            print("[DuckDuckGo raw response]")
-            print("  query: " .. query)
-            print("  http_status: " .. tostring(status))
-            print("  content_type: " .. tostring(content_type))
-            print("  body_bytes: " .. tostring(#body))
-            print("  body_preview_bytes: " .. tostring(math.min(#body, M.config.debug_body_limit)))
-            print("  body_preview_begin")
-            print(body:sub(1, M.config.debug_body_limit))
-            print("  body_preview_end")
-            print("[End DuckDuckGo raw response]")
-        end
-
-        local results =
-            parse_results(body, count)
-
-        print("[DuckDuckGo payload]")
-        print("  query: " .. query)
-        print("  result_count: " .. tostring(#results))
-
-        for _, result in ipairs(results) do
-            print(string.format(
-                "  [%d] %s | %s | %s",
-                result.rank,
-                result.title,
-                result.url,
-                result.snippet
-            ))
-        end
-
-        print("[End DuckDuckGo payload]")
-
-        if M.config.debug then
-            print("[DuckDuckGo parser diagnosis]")
-            print("  parser_result_count: " .. tostring(#results))
-            print("  requested_result_count: " .. tostring(count))
-            print("  parser_status: " .. (#results > 0 and "results_found" or "no_results_parsed"))
-            print("[End DuckDuckGo parser diagnosis]")
-        end
-
-        callback(
-            {
-                query = query,
-                engine = "DuckDuckGo",
-                results = results,
-                evidence = Evidence.encode(
-                    (function()
-                        local items = {}
-                        for _, result in ipairs(results) do
-                            items[#items + 1] =
-                                Evidence.web_result(result)
-                        end
-                        return items
-                    end)()
-                ),
-                rendered =
-                    Evidence.render_web_results(results),
-            },
-            nil
+        print(
+            "[Web search provider attempt "
+            .. tostring(provider_index - 1)
+            .. "] "
+            .. provider.name
         )
+
+        search_provider(
+            provider,
+            query,
+            count,
+            function(result, err)
+                if result then
+                    callback(result, nil)
+                    return
+                end
+
+                print(
+                    "[Web search provider failed] "
+                    .. provider.name
+                    .. ": "
+                    .. tostring(err and err.category or "unknown")
+                )
+
+                try_provider(err)
+            end
+        )
+    end
+
+    try_provider(nil)
     end)
 end
 
