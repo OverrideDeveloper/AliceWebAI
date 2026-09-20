@@ -2,8 +2,8 @@
 -- Web search tool adapter for the standalone lua-web-search module.
 -- Lua 5.1 / Luvit compatible.
 
-local WebSearchEngine = require("web_search_engine")
-local DuckDuckGo = require("providers.duckduckgo")
+local WebSearchEngine = require("./lua-web-search/web_search_engine")
+local DuckDuckGo = require("./lua-web-search/providers/duckduckgo")
 
 local M = {}
 
