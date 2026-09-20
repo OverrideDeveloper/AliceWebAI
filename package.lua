@@ -25,7 +25,8 @@ return {
   dependencies = {
     "luvit/require",
     "luvit/http",
-    "dkjson"
+    "dkjson",
+    "OverrideDeveloper/lua-web-search"
   },
   optionalDependencies = {
     "luvit/websocket",
