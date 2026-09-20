@@ -29,6 +29,10 @@ function M.classify_error(message)
         return "timeout"
     end
 
+    if text:match("access challenge") then
+        return "provider_challenge"
+    end
+
     if text:match("provider_unavailable") then
         return "provider_unavailable"
     end
