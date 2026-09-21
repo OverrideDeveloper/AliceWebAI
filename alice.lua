@@ -989,10 +989,10 @@ OllamaClient.call(
                 err
             )
 
-            Observability.log("request_complete", request_context, {
-                outcome = "failure",
-                request_terminal = true,
-            })
+            Observability.complete(
+                request_context,
+                "failure"
+            )
 
             callback(
                 nil,
@@ -1055,10 +1055,10 @@ OllamaClient.call(
             )
         end
 
-        Observability.log("request_complete", request_context, {
-            outcome = "success",
-            request_terminal = true,
-        })
+        Observability.complete(
+            request_context,
+            "success"
+        )
 
         callback(
             final_response,
