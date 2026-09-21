@@ -78,6 +78,7 @@ function M.new_context(fields)
         tool_round = fields.tool_round,
         tool_name = fields.tool_name,
         started_at = os.time(),
+        closed = false,
     }
 
     return context
@@ -125,6 +126,21 @@ function M.error(event, context, message, fields)
         category = category,
         message = safe_string(message),
     }
+end
+
+function M.complete(context, outcome)
+    if not context or context.closed == true then
+        return false
+    end
+
+    context.closed = true
+
+    M.log("request_complete", context, {
+        outcome = outcome or "unknown",
+        request_terminal = true,
+    })
+
+    return true
 end
 
 function M.increment(name)
