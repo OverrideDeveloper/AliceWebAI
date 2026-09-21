@@ -25,7 +25,7 @@
 -- Supports Ollama tool calling through asynchronous tool rounds.
 
 local http = require("http")
-local json = require("json")
+local json = require("./json")
 
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
