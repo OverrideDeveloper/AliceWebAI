@@ -264,6 +264,62 @@ The Luvit web server should remain bound to:
 
 Using `127.0.0.1` explicitly avoids relying on local hostname resolution when connecting between the Lua middleware and Ollama.
 
+## Web Search
+
+Alice's `web_search` capability is a provider boundary rather than a dependency on one search engine.
+
+The current provider pool is:
+
+* DuckDuckGo HTML
+* Mojeek HTML fallback
+
+A provider returning an access challenge, HTTP failure, timeout, or unusable response is treated as provider unavailability. It is **not** represented as a successful search with zero results.
+
+A genuine successful search with no matching results remains a valid empty result set.
+
+This distinction is intentional:
+
+```text
+HTTP response
+    |
+    +-- search results page ----> parse results
+    |
+    +-- access challenge -------> provider failure / fallback
+    |
+    +-- HTTP failure -----------> provider failure / fallback
+    |
+    +-- empty response ---------> provider failure / fallback
+```
+
+The web-search layer also records bounded diagnostics for the provider response, including HTTP status, content type, response size, and a bounded response preview. These diagnostics are intended for operator troubleshooting rather than normal human-facing chat.
+
+### Search-loop invariants
+
+Web search is bounded per model request:
+
+* At most three distinct web-search attempts are allowed.
+* Repeating the same normalized query is rejected as a duplicate attempt.
+* Provider fallback happens inside a single `web_search` operation.
+* The model must not interpret provider failure as evidence that the searched subject does not exist.
+
+### Failure language
+
+Internal error categories remain available to observability. Human-facing failures are translated into natural language rather than exposing implementation errors such as `Maximum tool-call rounds exceeded`.
+
+### Dice tool
+
+The `dice_roll` tool supports an optional `individual` argument. When true, the tool returns the individual rolls and their total. The default behavior remains returning only the total.
+
+### Regression tests
+
+Provider classification and parser behavior have regression coverage in:
+
+```text
+tests/web_search.lua
+```
+
+The test fixture includes the DuckDuckGo access-challenge response that motivated the provider fallback work.
+
 ## Semantic Memory
 
 Alice's long-term semantic memory is provided by ChromaDB.

@@ -29,6 +29,14 @@ function M.classify_error(message)
         return "timeout"
     end
 
+    if text:match("access challenge") then
+        return "provider_challenge"
+    end
+
+    if text:match("provider_unavailable") then
+        return "provider_unavailable"
+    end
+
     if text:match("http %d") then
         return "http_error"
     end
@@ -45,7 +53,11 @@ function M.classify_error(message)
         return "tool_error"
     end
 
-    if text:match("empty response") or text:match("no response") then
+    if text:match("no response from model") then
+        return "model_empty_response"
+    end
+
+    if text:match("empty response") then
         return "empty_response"
     end
 

@@ -27,7 +27,7 @@
 
 local ConversationHandler = require("conversation_handler")
 local OllamaClient = require("./ollama_client")
-local json = require("json")
+local json = require("./json")
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
@@ -161,9 +161,7 @@ end
 
 local function save_conversation_history(path, history)
 local encoded, encode_error =
-json.encode(history, {
-indent = true
-})
+json.encode(history)
 
 
 if not encoded then
@@ -793,6 +791,41 @@ return nil
 
 end
 
+local function humanize_failure(message, provenance)
+    local category =
+        Observability.classify_error(message)
+
+    if provenance and provenance.max_tool_rounds_exceeded then
+        return "Oh dear. I tried my best, but I could not complete that request before the tool-search limit was reached."
+    end
+
+    if category == "provider_unavailable" then
+        return "Oh dear. I tried my best, but the web search providers were unavailable, so I could not get you a reliable search result."
+    end
+
+    if category == "provider_challenge" then
+        return "Oh dear. I tried my best, but the search provider would not return results to Alice, so I could not get you a reliable search result."
+    end
+
+    if category == "timeout" then
+        return "Oh dear. I tried my best, but the search request timed out before I could get a reliable result."
+    end
+
+    if category == "http_error" then
+        return "Oh dear. I tried my best, but the search service returned an HTTP error before I could get a reliable result."
+    end
+
+    if category == "model_empty_response" then
+        return "Oh dear. I tried my best, but the model stopped responding before I could finish that request."
+    end
+
+    if category == "empty_response" then
+        return "Oh dear. I tried my best, but I did not receive a usable response."
+    end
+
+    return "Oh dear. I tried my best, but I could not complete that request reliably."
+end
+
 function Alice.process_user_input(
 user_input,
 callback,
@@ -906,7 +939,7 @@ OllamaClient.call(
 
             callback(
                 nil,
-                err
+                humanize_failure(err, provenance)
             )
 
             return

@@ -25,7 +25,6 @@ return {
   dependencies = {
     "luvit/require",
     "luvit/http",
-    "dkjson"
   },
   optionalDependencies = {
     "luvit/websocket",

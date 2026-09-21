@@ -25,7 +25,7 @@
 -- Supports Ollama tool calling through asynchronous tool rounds.
 
 local http = require("http")
-local json = require("json")
+local json = require("./json")
 
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
@@ -42,6 +42,8 @@ local function new_metadata()
         web_evidence_used = false,
         web_urls = {},
         evidence_events = {},
+        web_search_attempts = 0,
+        web_search_queries = {},
     }
 end
 
@@ -645,6 +647,35 @@ local function make_tool_result_message(
 end
 
 
+local function normalized_search_query(value)
+    return tostring(value or "")
+        :lower()
+        :gsub("%s+", " ")
+        :match("^%s*(.-)%s*$")
+end
+
+local function bounded_web_search_error(metadata, arguments)
+    local query =
+        normalized_search_query(arguments and arguments.query)
+
+    if metadata.web_search_attempts >= 3 then
+        return "Web search attempt limit reached for this request."
+    end
+
+    if query ~= "" and metadata.web_search_queries[query] then
+        return "Duplicate web search query; use a different search strategy."
+    end
+
+    metadata.web_search_attempts =
+        metadata.web_search_attempts + 1
+
+    if query ~= "" then
+        metadata.web_search_queries[query] = true
+    end
+
+    return nil
+end
+
 local function execute_tool_calls(
     tool_calls,
     index,
@@ -662,14 +693,65 @@ local function execute_tool_calls(
     local tool_call =
         tool_calls[index]
 
+    local function_data =
+        tool_call["function"] or {}
+
+    local tool_name =
+        function_data.name
+
+    if tool_name == "web_search" then
+        local arguments =
+            decode_tool_arguments(
+                function_data.arguments or {}
+            )
+
+        if type(arguments) == "table" then
+            local bounded_error =
+                bounded_web_search_error(
+                    metadata,
+                    arguments
+                )
+
+            if bounded_error then
+                table.insert(
+                    messages,
+                    make_tool_result_message(
+                        tool_call,
+                        bounded_error
+                    )
+                )
+
+                execute_tool_calls(
+                    tool_calls,
+                    index + 1,
+                    messages,
+                    callback,
+                    metadata
+                )
+                return
+            end
+        end
+    end
+
     execute_tool(
         tool_call,
         function(result, err)
 
             if err then
-                result =
-                    "Tool error: "
-                    .. tostring(err)
+                if type(err) == "table" then
+                    local encoded = json.encode({
+                        error = err.category,
+                        message = err.message,
+                        provider = err.provider,
+                        attempts = err.attempts,
+                    })
+                    result = encoded
+                        or ("Tool error: " .. tostring(err.message))
+                else
+                    result =
+                        "Tool error: "
+                        .. tostring(err)
+                end
             end
 
             local function_data = tool_call["function"] or {}

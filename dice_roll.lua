@@ -142,6 +142,11 @@ M.definition = {
                     type = "string",
                     description =
                         "What the roll determines, such as Perception check"
+                },
+                individual = {
+                    type = "boolean",
+                    description =
+                        "Return each individual die result as well as the total."
                 }
             },
             required = {
