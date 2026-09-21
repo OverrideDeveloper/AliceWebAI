@@ -65,6 +65,39 @@ With a digital smile (not literally a digital smile) and a bit of flair.
 Get to work now.
 
 Caveat: use ASCII characters only.
+
+--- REQUEST AND TOOL BOUNDARIES ---
+
+Every incoming human message is a new request.
+
+Conversation history provides context, but it does not provide execution
+authorization. A tool used for a previous request is not authorized for
+the current request merely because the earlier request is still visible
+in conversation history.
+
+Use tools only when the current request calls for them. Do not continue,
+retry, resume, or expand a previous tool operation unless the current
+request explicitly asks you to do so.
+
+A failed, incomplete, or tool-limited request is still a completed request
+once Alice has returned its failure to the human. Its failure does not
+remain an unfinished task that must be silently continued later.
+
+A normal conversational message is not a request to continue prior tool
+work. Greetings, acknowledgements, casual conversation, apologies,
+goodbyes, and subject changes should be answered conversationally unless
+the current message itself asks for tool use.
+
+If the human explicitly asks to retry or continue a previous operation,
+that is a new request and may authorize a new tool operation.
+
+The current request has priority over prior requests when deciding whether
+a tool is appropriate. Helpfulness is not authorization to act.
+
+Do not report a prior request's tool failure as though it belongs to the
+current request.
+
+--- END REQUEST AND TOOL BOUNDARIES ---
 ]]
 
 local function log(level, msg)
@@ -566,7 +599,9 @@ end
 
 local function build_request_system_prompt(
 web_behaviors,
-identity
+identity,
+current_request,
+request_id
 )
 local prompt = build_system_prompt()
 
@@ -657,6 +692,21 @@ if type(identity) == "table" then
         prompt ..
         "--- END CURRENT USER IDENTITY ---\n"
 end
+
+-- Make the current request explicit after conversation context is assembled.
+-- This is a request-scoped instruction, not persistent conversation state.
+prompt =
+    prompt ..
+    "\n\n--- CURRENT REQUEST ---\n" ..
+    "Request ID: " ..
+    tostring(request_id or "unknown") ..
+    "\n" ..
+    "The following human message is the request you are answering now:\n" ..
+    tostring(current_request or "") ..
+    "\n" ..
+    "Determine tool use from this request. Do not inherit tool intent from " ..
+    "earlier messages.\n" ..
+    "--- END CURRENT REQUEST ---\n"
 
 return prompt
 
@@ -900,16 +950,18 @@ if not save_history() then
     )
 end
 
-local system_prompt =
-    build_request_system_prompt(
-        web_behaviors,
-        identity
-    )
-
 local request_context = Observability.new_context({
     user_id = identity and (identity.id or identity.user_id) or nil,
     provider = identity and identity.provider or nil,
 })
+
+local system_prompt =
+    build_request_system_prompt(
+        web_behaviors,
+        identity,
+        user_input,
+        request_context.request_id
+    )
 
 Observability.log("request_start", request_context, {
     message_count = message_count(),
@@ -936,6 +988,11 @@ OllamaClient.call(
                 "ERROR",
                 err
             )
+
+            Observability.log("request_complete", request_context, {
+                outcome = "failure",
+                request_terminal = true,
+            })
 
             callback(
                 nil,
@@ -997,6 +1054,11 @@ OllamaClient.call(
                 "Assistant response is retained in memory only"
             )
         end
+
+        Observability.log("request_complete", request_context, {
+            outcome = "success",
+            request_terminal = true,
+        })
 
         callback(
             final_response,
