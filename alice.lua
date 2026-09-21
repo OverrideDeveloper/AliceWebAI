@@ -1064,7 +1064,8 @@ OllamaClient.call(
             final_response,
             nil
         )
-    end
+    end,
+    request_context
 )
 
 
