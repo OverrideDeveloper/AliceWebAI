@@ -161,9 +161,7 @@ end
 
 local function save_conversation_history(path, history)
 local encoded, encode_error =
-json.encode(history, {
-indent = true
-})
+json.encode(history)
 
 
 if not encoded then
