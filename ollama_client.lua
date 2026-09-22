@@ -241,14 +241,15 @@ local function make_request(
 
     local function finish(
         response,
-        err
+        err,
+        metadata
     )
         if completed then
             return
         end
 
         completed = true
-        callback(response, err)
+        callback(response, err, metadata or {})
     end
 
     local request_options = {
@@ -308,7 +309,11 @@ local function make_request(
                                         "Ollama HTTP %d: %s",
                                         status_code,
                                         body
-                                    )
+                                    ),
+                                    {
+                                        status_code = status_code,
+                                        response_bytes = #body,
+                                    }
                                 )
 
                                 return
@@ -317,14 +322,22 @@ local function make_request(
                             if body == "" then
                                 finish(
                                     nil,
-                                    "Ollama returned an empty response"
+                                    "Ollama returned an empty response",
+                                    {
+                                        status_code = status_code,
+                                        response_bytes = 0,
+                                    }
                                 )
                                 return
                             end
 
                             finish(
                                 body,
-                                nil
+                                nil,
+                                {
+                                    status_code = status_code,
+                                    response_bytes = #body,
+                                }
                             )
                         end
                     )
@@ -876,13 +889,16 @@ local function call_round(
         json_payload,
         function(
             response_text,
-            request_error
+            request_error,
+            transport_metadata
         )
 
             if request_error then
                 Observability.log("model_response_received", request_context, {
                     round = round,
                     outcome = "error",
+                    http_status = transport_metadata and transport_metadata.status_code or nil,
+                    response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
                 })
                 callback(
                     nil,
@@ -908,15 +924,42 @@ local function call_round(
             local assistant_message =
                 decoded.message
 
+            local content = assistant_message.content or ""
+            local tool_calls = get_tool_calls(assistant_message)
+
+            local done_reason = decoded.done_reason
+            local prompt_eval_count = decoded.prompt_eval_count
+            local eval_count = decoded.eval_count
+            local total_tokens = nil
+
+            if type(prompt_eval_count) == "number"
+               and type(eval_count) == "number" then
+                total_tokens = prompt_eval_count + eval_count
+            end
+
+            local context_exhausted =
+                done_reason == "length"
+
             Observability.log("model_response_received", request_context, {
                 round = round,
                 outcome = "success",
+                http_status = transport_metadata and transport_metadata.status_code or nil,
+                response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
+                content_bytes = #content,
+                tool_call_count = #tool_calls,
+                done = decoded.done,
+                done_reason = done_reason,
+                prompt_eval_count = prompt_eval_count,
+                eval_count = eval_count,
+                total_tokens = total_tokens,
+                total_duration_ns = decoded.total_duration,
+                load_duration_ns = decoded.load_duration,
+                prompt_eval_duration_ns = decoded.prompt_eval_duration,
+                eval_duration_ns = decoded.eval_duration,
+                context_exhausted = context_exhausted,
             })
 
-            local tool_calls =
-                get_tool_calls(
-                    assistant_message
-                )
+            local tool_calls = get_tool_calls(assistant_message)
 
             -- Normal final answer.
             if #tool_calls == 0 then
@@ -925,10 +968,6 @@ local function call_round(
                     round = round,
                     decision = "no_tool",
                 })
-
-                local content =
-                    assistant_message.content
-                    or ""
 
                 if content == "" then
                     callback(
