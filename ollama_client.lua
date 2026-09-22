@@ -959,8 +959,6 @@ local function call_round(
                 context_exhausted = context_exhausted,
             })
 
-            local tool_calls = get_tool_calls(assistant_message)
-
             -- Normal final answer.
             if #tool_calls == 0 then
 
@@ -970,6 +968,18 @@ local function call_round(
                 })
 
                 if content == "" then
+                    Observability.log("model_empty_response", request_context, {
+                        round = round,
+                        http_status = transport_metadata and transport_metadata.status_code or nil,
+                        response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
+                        done = decoded.done,
+                        done_reason = done_reason,
+                        prompt_eval_count = prompt_eval_count,
+                        eval_count = eval_count,
+                        total_tokens = total_tokens,
+                        context_exhausted = context_exhausted,
+                    })
+
                     callback(
                         nil,
                         "No response from model"
