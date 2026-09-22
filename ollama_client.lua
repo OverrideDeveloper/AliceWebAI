@@ -924,7 +924,24 @@ local function call_round(
             local assistant_message =
                 decoded.message
 
+            -- Keep terminal visibility consistent for ordinary
+            -- conversational rounds as well as tool-call rounds.
+            -- Ollama may provide model reasoning separately from
+            -- the user-facing message content.
+            local thinking =
+                assistant_message.thinking or decoded.thinking or ""
+
+            if thinking ~= "" then
+                print("[Ollama model thinking]")
+                print(thinking)
+                print("[End Ollama model thinking]")
+            end
+
             local content = assistant_message.content or ""
+
+            print("[Ollama response]")
+            print(content)
+            print("[End Ollama response]")
             local tool_calls = get_tool_calls(assistant_message)
 
             local done_reason = decoded.done_reason
