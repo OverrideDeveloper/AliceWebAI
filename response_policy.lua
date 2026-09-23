@@ -84,12 +84,35 @@ function M.inspect(response, metadata)
 end
 
 function M.decorate(response, metadata)
+    metadata = metadata or {}
+
     local inspected = M.inspect(response, metadata)
+    local decorated = inspected.response
+    local tool_calls = metadata.tool_calls or {}
+
+    if #tool_calls > 0 then
+        local lines = {
+            "",
+            "--- Tools executed ---",
+        }
+
+        for _, tool_call in ipairs(tool_calls) do
+            local status = tool_call.status or "unknown"
+            local name = tool_call.tool_name or "unknown"
+            lines[#lines + 1] = string.format(
+                "- %s [%s]",
+                name,
+                status
+            )
+        end
+
+        decorated = decorated .. "\\n" .. table.concat(lines, "\\n")
+    end
 
     -- Keep the full inspection result available to callers for future
     -- operator/diagnostic output, but do not leak internal epistemic
     -- diagnostics into the human-facing response.
-    return inspected.response
+    return decorated
 end
 
 return M
