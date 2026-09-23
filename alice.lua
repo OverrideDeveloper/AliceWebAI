@@ -1027,6 +1027,7 @@ OllamaClient.call(
             provenance_theater = inspected.provenance_theater,
             freshness_gap = inspected.freshness_gap,
             web_url_count = #inspected.web_urls,
+            tool_call_count = provenance and #provenance.tool_calls or 0,
         })
 
         local final_response = ResponsePolicy.decorate(
@@ -1035,6 +1036,7 @@ OllamaClient.call(
                 web_evidence_used = provenance and provenance.web_evidence_used or false,
                 web_urls = provenance and provenance.web_urls or {},
                 evidence_events = provenance and provenance.evidence_events or {},
+                tool_calls = provenance and provenance.tool_calls or {},
             }
         )
 
