@@ -907,7 +907,8 @@ local function call_round(
                 })
                 callback(
                     nil,
-                    request_error
+                    request_error,
+                    metadata
                 )
                 return
             end
@@ -921,7 +922,8 @@ local function call_round(
             if not decoded then
                 callback(
                     nil,
-                    response_error
+                    response_error,
+                    metadata
                 )
                 return
             end
@@ -1004,7 +1006,8 @@ local function call_round(
 
                     callback(
                         nil,
-                        "No response from model"
+                        "No response from model",
+                        metadata
                     )
                     return
                 end
