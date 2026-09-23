@@ -494,13 +494,6 @@ local function execute_tool(
             .. "]"
     )
 
-    local tool_event = {
-        tool_name = tool_name,
-        tool_round = request_context and request_context.tool_round or nil,
-    }
-
-    metadata.tool_calls[#metadata.tool_calls + 1] = tool_event
-
     ----------------------------------------------------------------
     -- Asynchronous tools
     ----------------------------------------------------------------
@@ -766,6 +759,13 @@ local function execute_tool_calls(
             end
         end
     end
+
+    -- Record execution at the middleware boundary. The tool has passed
+    -- validation and its handler is about to run.
+    metadata.tool_calls[#metadata.tool_calls + 1] = {
+        tool_name = tool_name,
+        tool_round = request_context and request_context.tool_round or nil,
+    }
 
     execute_tool(
         tool_call,
