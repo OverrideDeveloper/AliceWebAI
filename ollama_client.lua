@@ -44,7 +44,7 @@ local function new_metadata(request_context)
         web_evidence_used = false,
         web_urls = {},
         evidence_events = {},
-        tool_calls = {},
+        tool_calls = request_context and request_context.tool_calls or {},
         web_search_attempts = 0,
         web_search_queries = {},
     }
@@ -494,6 +494,13 @@ local function execute_tool(
             .. "]"
     )
 
+    local tool_event = {
+        tool_name = tool_name,
+        tool_round = request_context and request_context.tool_round or nil,
+    }
+
+    metadata.tool_calls[#metadata.tool_calls + 1] = tool_event
+
     ----------------------------------------------------------------
     -- Asynchronous tools
     ----------------------------------------------------------------
@@ -780,21 +787,6 @@ local function execute_tool_calls(
                         .. tostring(err)
                 end
             end
-
-            local function_data = tool_call["function"] or {}
-            local tool_name = function_data.name
-
-            local tool_event = {
-                tool_name = tool_name,
-                tool_round = request_context and request_context.tool_round or nil,
-                status = err and "error" or "success",
-            }
-
-            if err then
-                tool_event.error = tostring(err)
-            end
-
-            metadata.tool_calls[#metadata.tool_calls + 1] = tool_event
 
             if tool_name == "web_search" and err == nil then
                 metadata.web_evidence_used = true
