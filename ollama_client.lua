@@ -1085,7 +1085,9 @@ local function call_round(
                         metadata,
                         request_context
                     )
-                end
+                end,
+                metadata,
+                request_context
             )
         end
     )
