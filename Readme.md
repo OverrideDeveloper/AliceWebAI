@@ -337,8 +337,8 @@ Provider classification and parser behavior have regression coverage in:
 
 ```text
 tests/web_search.lua
- tests/request_boundary.lua
- tests/response_policy.lua
+tests/request_boundary.lua
+tests/response_policy.lua
 ```
 
 The test fixture includes the DuckDuckGo access-challenge response that motivated the provider fallback work.
