@@ -106,7 +106,7 @@ function M.decorate(response, metadata)
             )
         end
 
-        decorated = decorated .. "\\n" .. table.concat(lines, "\\n")
+        decorated = decorated .. "\n" .. table.concat(lines, "\n")
     end
 
     -- Keep the full inspection result available to callers for future
