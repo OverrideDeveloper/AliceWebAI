@@ -77,6 +77,7 @@ function M.new_context(fields)
         provider = fields.provider,
         tool_round = fields.tool_round,
         tool_name = fields.tool_name,
+        tool_calls = {},
         started_at = os.time(),
         closed = false,
     }
