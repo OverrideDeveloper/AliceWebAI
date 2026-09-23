@@ -93,16 +93,15 @@ function M.decorate(response, metadata)
     if #tool_calls > 0 then
         local lines = {
             "",
-            "--- Tools executed ---",
+            "--- Tool execution ---",
+            "The model ran the following tool(s); this reply may contain results from them.",
         }
 
         for _, tool_call in ipairs(tool_calls) do
-            local status = tool_call.status or "unknown"
             local name = tool_call.tool_name or "unknown"
             lines[#lines + 1] = string.format(
-                "- %s [%s]",
-                name,
-                status
+                "- %s",
+                name
             )
         end
 
