@@ -994,9 +994,19 @@ OllamaClient.call(
                 "failure"
             )
 
+            local failure_response = ResponsePolicy.decorate(
+                humanize_failure(err, provenance),
+                {
+                    web_evidence_used = provenance and provenance.web_evidence_used or false,
+                    web_urls = provenance and provenance.web_urls or {},
+                    evidence_events = provenance and provenance.evidence_events or {},
+                    tool_calls = provenance and provenance.tool_calls or {},
+                }
+            )
+
             callback(
                 nil,
-                humanize_failure(err, provenance)
+                failure_response
             )
 
             return
@@ -1006,6 +1016,7 @@ OllamaClient.call(
             web_evidence_used = provenance and provenance.web_evidence_used or false,
             web_urls = provenance and provenance.web_urls or {},
             evidence_events = provenance and provenance.evidence_events or {},
+            tool_calls = provenance and provenance.tool_calls or {},
         })
 
         Observability.log("response_inspected", request_context, {
