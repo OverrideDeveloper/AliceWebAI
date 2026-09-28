@@ -70,7 +70,23 @@ local function validate(arguments)
         request.max_bytes = max_bytes
     end
 
-    return request, nil
+    local timeout = M.config.timeout
+
+    if arguments.timeout ~= nil then
+        timeout = tonumber(arguments.timeout)
+
+        if not timeout then
+            return nil, "EvidenceGather timeout must be an integer"
+        end
+
+        timeout = math.floor(timeout)
+
+        if timeout < 1 then
+            return nil, "EvidenceGather timeout must be greater than zero"
+        end
+    end
+
+    return request, nil, timeout
 end
 
 function M.gather(arguments, callback)
@@ -78,7 +94,8 @@ function M.gather(arguments, callback)
         return nil, "EvidenceGather requires a callback"
     end
 
-    local request, validation_error = validate(arguments)
+    local request, validation_error, timeout =
+        validate(arguments)
 
     if not request then
         callback(nil, {
@@ -100,7 +117,7 @@ function M.gather(arguments, callback)
     webcall.get(
         M.config.endpoint .. "/local_data/getevidence" .. query,
         {
-            timeout = M.config.timeout,
+            timeout = timeout,
             headers = {
                 ["Accept"] = "application/json",
             },
@@ -172,6 +189,11 @@ M.definition = {
                     type = "integer",
                     description =
                         "Maximum evidence budget in bytes. Defaults to 512."
+                },
+                timeout = {
+                    type = "integer",
+                    description =
+                        "HTTP request timeout in milliseconds. Defaults to 10000."
                 },
             },
             required = {"corpus", "index", "query"},
