@@ -32,6 +32,8 @@ local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
 local WebSearch = require("./web_search")
+local EvidenceHunt = require("./evidence_hunt")
+local EvidenceGather = require("./evidence_gather")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -70,6 +72,12 @@ local ToolHandlers = {
     dice_roll = DiceRoll.dice_roll,
     web_search = function(arguments, callback)
         WebSearch.search(arguments, callback)
+    end,
+    EvidenceHunt = function(arguments, callback)
+        EvidenceHunt.hunt(arguments, callback)
+    end,
+    EvidenceGather = function(arguments, callback)
+        EvidenceGather.gather(arguments, callback)
     end,
 }
 
@@ -502,6 +510,8 @@ local function execute_tool(
         memory_search = true,
         memory_store = true,
         web_search = true,
+        EvidenceHunt = true,
+        EvidenceGather = true,
     }
 
     if asynchronous_tools[tool_name] then
