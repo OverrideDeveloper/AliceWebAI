@@ -36,7 +36,7 @@ EvidenceGather.gather(
 assert(err == nil, "EvidenceGather should return no error")
 assert(result.index == 123, "Record index should round-trip")
 assert(
-    calls.url == "http://127.0.0.1:60005/local_data/getevidence?corpus=wikipedia&i=123&query=Ada%20Lovelace&max_bytes=512",
+    calls.url == "http://127.0.0.1:60005/local_data/getevidence?corpus=wikipedia&i=123&query=Ada%20Lovelace",
     "EvidenceGather must call the get evidence endpoint with encoded parameters"
 )
 
