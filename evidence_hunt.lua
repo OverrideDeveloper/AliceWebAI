@@ -10,8 +10,6 @@ local M = {}
 M.config = {
     endpoint = "http://127.0.0.1:60005",
     timeout = 10000,
-    record_limit = 5,
-    max_bytes = 512,
 }
 
 local function trim(value)
@@ -39,31 +37,44 @@ local function validate(arguments)
         return nil, "EvidenceHunt requires a query"
     end
 
-    local record_limit =
-        tonumber(arguments.record_limit or M.config.record_limit)
-        or M.config.record_limit
-
-    local max_bytes =
-        tonumber(arguments.max_bytes or M.config.max_bytes)
-        or M.config.max_bytes
-
-    record_limit = math.floor(record_limit)
-    max_bytes = math.floor(max_bytes)
-
-    if record_limit < 1 then
-        return nil, "EvidenceHunt record_limit must be greater than zero"
-    end
-
-    if max_bytes < 1 then
-        return nil, "EvidenceHunt max_bytes must be greater than zero"
-    end
-
-    return {
+    local request = {
         corpus = corpus,
         query = query,
-        record_limit = record_limit,
-        max_bytes = max_bytes,
-    }, nil
+    }
+
+    if arguments.record_limit ~= nil then
+        local record_limit = tonumber(arguments.record_limit)
+
+        if not record_limit then
+            return nil, "EvidenceHunt record_limit must be an integer"
+        end
+
+        record_limit = math.floor(record_limit)
+
+        if record_limit < 1 then
+            return nil, "EvidenceHunt record_limit must be greater than zero"
+        end
+
+        request.record_limit = record_limit
+    end
+
+    if arguments.max_bytes ~= nil then
+        local max_bytes = tonumber(arguments.max_bytes)
+
+        if not max_bytes then
+            return nil, "EvidenceHunt max_bytes must be an integer"
+        end
+
+        max_bytes = math.floor(max_bytes)
+
+        if max_bytes < 1 then
+            return nil, "EvidenceHunt max_bytes must be greater than zero"
+        end
+
+        request.max_bytes = max_bytes
+    end
+
+    return request, nil
 end
 
 function M.hunt(arguments, callback)
