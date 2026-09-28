@@ -32,6 +32,8 @@ local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
 local WebSearch = require("./web_search")
+local EvidenceHunt = require("./evidence_hunt")
+local EvidenceGather = require("./evidence_gather")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -70,6 +72,12 @@ local ToolHandlers = {
     dice_roll = DiceRoll.dice_roll,
     web_search = function(arguments, callback)
         WebSearch.search(arguments, callback)
+    end,
+    EvidenceHunt = function(arguments, callback)
+        EvidenceHunt.hunt(arguments, callback)
+    end,
+    EvidenceGather = function(arguments, callback)
+        EvidenceGather.gather(arguments, callback)
     end,
 }
 
@@ -502,6 +510,8 @@ local function execute_tool(
         memory_search = true,
         memory_store = true,
         web_search = true,
+        EvidenceHunt = true,
+        EvidenceGather = true,
     }
 
     if asynchronous_tools[tool_name] then
@@ -591,11 +601,11 @@ local function serialize_tool_result(result)
         return tostring(result)
     end
 
-    -- Tool wrappers may contain multiple representations of the
-    -- same evidence. Only send the model the compact structured
-    -- result it needs to reason over. Keep evidence/rendering
-    -- metadata in the application layer.
-    if result.results then
+    -- Web search results have a known presentation shape that can be
+    -- compacted before being sent to the model. Local evidence results
+    -- also contain a "results" array, but their records are authoritative
+    -- evidence and must not be projected through the web-search schema.
+    if result.results and result.corpus == nil then
         local compact = {
             query = result.query,
             results = {},
@@ -635,6 +645,8 @@ local function serialize_tool_result(result)
     return "Unable to serialize tool result: "
         .. tostring(encode_error)
 end
+
+OllamaClient._serialize_tool_result = serialize_tool_result
 
 
 local function make_tool_result_message(
