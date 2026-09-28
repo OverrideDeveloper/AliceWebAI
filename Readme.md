@@ -264,6 +264,27 @@ The Luvit web server should remain bound to:
 
 Using `127.0.0.1` explicitly avoids relying on local hostname resolution when connecting between the Lua middleware and Ollama.
 
+## Request and Tool Boundaries
+
+Alice treats every incoming human message as a new request.
+
+Conversation history is context, not execution authorization. Tool use is request-scoped:
+
+* A tool used for a previous request is not automatically authorized for the next request.
+* A failed or tool-limited request is terminal once Alice reports the failure.
+* A conversational follow-up does not resume previous tool work.
+* An explicit retry or continuation in the current message establishes a new request and may authorize new tool use.
+* Tool failures are reported only within the request that produced them.
+* Request IDs and terminal request state provide an execution boundary around the asynchronous model/tool loop.
+
+The invariant is:
+
+`Tools belong to requests, not conversations.`
+
+Observability records the request boundary, model round decisions, tool calls, and terminal request outcome so stale tool execution can be distinguished from current-request behavior.
+
+Tool execution provenance is also carried with the completed request. When Alice executes one or more tools, the final human-facing reply includes a concise "Tools executed" section listing the tools and whether each execution succeeded or failed. This decoration happens in the Lua response layer rather than in a platform adapter, so the same provenance can be presented consistently to Discord, the web interface, and future clients. The structured tool-call metadata remains available to the application layer for future integrations such as the Rust data engine.
+
 ## Web Search
 
 Alice's `web_search` capability is a provider boundary rather than a dependency on one search engine.
@@ -316,6 +337,8 @@ Provider classification and parser behavior have regression coverage in:
 
 ```text
 tests/web_search.lua
+tests/request_boundary.lua
+tests/response_policy.lua
 ```
 
 The test fixture includes the DuckDuckGo access-challenge response that motivated the provider fallback work.

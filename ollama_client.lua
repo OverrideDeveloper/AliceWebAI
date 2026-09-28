@@ -33,15 +33,18 @@ local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
 local WebSearch = require("./web_search")
 local Evidence = require("./evidence")
+local Observability = require("./observability")
 
 local OllamaClient = {}
 
 
-local function new_metadata()
+local function new_metadata(request_context)
     return {
+        request_id = request_context and request_context.request_id or nil,
         web_evidence_used = false,
         web_urls = {},
         evidence_events = {},
+        tool_calls = request_context and request_context.tool_calls or {},
         web_search_attempts = 0,
         web_search_queries = {},
     }
@@ -239,14 +242,15 @@ local function make_request(
 
     local function finish(
         response,
-        err
+        err,
+        metadata
     )
         if completed then
             return
         end
 
         completed = true
-        callback(response, err)
+        callback(response, err, metadata or {})
     end
 
     local request_options = {
@@ -306,7 +310,11 @@ local function make_request(
                                         "Ollama HTTP %d: %s",
                                         status_code,
                                         body
-                                    )
+                                    ),
+                                    {
+                                        status_code = status_code,
+                                        response_bytes = #body,
+                                    }
                                 )
 
                                 return
@@ -315,14 +323,22 @@ local function make_request(
                             if body == "" then
                                 finish(
                                     nil,
-                                    "Ollama returned an empty response"
+                                    "Ollama returned an empty response",
+                                    {
+                                        status_code = status_code,
+                                        response_bytes = 0,
+                                    }
                                 )
                                 return
                             end
 
                             finish(
                                 body,
-                                nil
+                                nil,
+                                {
+                                    status_code = status_code,
+                                    response_bytes = #body,
+                                }
                             )
                         end
                     )
@@ -681,9 +697,14 @@ local function execute_tool_calls(
     index,
     messages,
     callback,
-    metadata
+    metadata,
+    request_context
 )
-    metadata = metadata or new_metadata()
+    metadata = metadata or new_metadata(request_context)
+
+    if request_context and request_context.closed == true then
+        return
+    end
 
     if index > #tool_calls then
         callback(nil, metadata)
@@ -698,6 +719,11 @@ local function execute_tool_calls(
 
     local tool_name =
         function_data.name
+
+    Observability.log("tool_call", request_context, {
+        tool_round = request_context and request_context.tool_round or nil,
+        tool_name = tool_name,
+    })
 
     if tool_name == "web_search" then
         local arguments =
@@ -726,12 +752,20 @@ local function execute_tool_calls(
                     index + 1,
                     messages,
                     callback,
-                    metadata
+                    metadata,
+                    request_context
                 )
                 return
             end
         end
     end
+
+    -- Record execution at the middleware boundary. The tool has passed
+    -- validation and its handler is about to run.
+    metadata.tool_calls[#metadata.tool_calls + 1] = {
+        tool_name = tool_name,
+        tool_round = request_context and request_context.tool_round or nil,
+    }
 
     execute_tool(
         tool_call,
@@ -753,9 +787,6 @@ local function execute_tool_calls(
                         .. tostring(err)
                 end
             end
-
-            local function_data = tool_call["function"] or {}
-            local tool_name = function_data.name
 
             if tool_name == "web_search" and err == nil then
                 metadata.web_evidence_used = true
@@ -790,7 +821,8 @@ local function execute_tool_calls(
                 index + 1,
                 messages,
                 callback,
-                metadata
+                metadata,
+                request_context
             )
         end
     )
@@ -803,9 +835,22 @@ local function call_round(
     tools,
     round,
     callback,
-    metadata
+    metadata,
+    request_context
 )
-    metadata = metadata or new_metadata()
+    metadata = metadata or new_metadata(request_context)
+
+    if request_context and request_context.closed == true then
+        return
+    end
+
+    if request_context then
+        request_context.tool_round = round
+    end
+
+    Observability.log("model_round_start", request_context, {
+        round = round,
+    })
 
     local payload = {
         model =
@@ -849,13 +894,21 @@ local function call_round(
         json_payload,
         function(
             response_text,
-            request_error
+            request_error,
+            transport_metadata
         )
 
             if request_error then
+                Observability.log("model_response_received", request_context, {
+                    round = round,
+                    outcome = "error",
+                    http_status = transport_metadata and transport_metadata.status_code or nil,
+                    response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
+                })
                 callback(
                     nil,
-                    request_error
+                    request_error,
+                    metadata
                 )
                 return
             end
@@ -869,7 +922,8 @@ local function call_round(
             if not decoded then
                 callback(
                     nil,
-                    response_error
+                    response_error,
+                    metadata
                 )
                 return
             end
@@ -877,22 +931,83 @@ local function call_round(
             local assistant_message =
                 decoded.message
 
-            local tool_calls =
-                get_tool_calls(
-                    assistant_message
-                )
+            -- Keep terminal visibility consistent for ordinary
+            -- conversational rounds as well as tool-call rounds.
+            -- Ollama may provide model reasoning separately from
+            -- the user-facing message content.
+            local thinking =
+                assistant_message.thinking or decoded.thinking or ""
+
+            if thinking ~= "" then
+                print("[Ollama model thinking]")
+                print(thinking)
+                print("[End Ollama model thinking]")
+            end
+
+            local content = assistant_message.content or ""
+
+            print("[Ollama response]")
+            print(content)
+            print("[End Ollama response]")
+            local tool_calls = get_tool_calls(assistant_message)
+
+            local done_reason = decoded.done_reason
+            local prompt_eval_count = decoded.prompt_eval_count
+            local eval_count = decoded.eval_count
+            local total_tokens = nil
+
+            if type(prompt_eval_count) == "number"
+               and type(eval_count) == "number" then
+                total_tokens = prompt_eval_count + eval_count
+            end
+
+            local context_exhausted =
+                done_reason == "length"
+
+            Observability.log("model_response_received", request_context, {
+                round = round,
+                outcome = "success",
+                http_status = transport_metadata and transport_metadata.status_code or nil,
+                response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
+                content_bytes = #content,
+                tool_call_count = #tool_calls,
+                done = decoded.done,
+                done_reason = done_reason,
+                prompt_eval_count = prompt_eval_count,
+                eval_count = eval_count,
+                total_tokens = total_tokens,
+                total_duration_ns = decoded.total_duration,
+                load_duration_ns = decoded.load_duration,
+                prompt_eval_duration_ns = decoded.prompt_eval_duration,
+                eval_duration_ns = decoded.eval_duration,
+                context_exhausted = context_exhausted,
+            })
 
             -- Normal final answer.
             if #tool_calls == 0 then
 
-                local content =
-                    assistant_message.content
-                    or ""
+                Observability.log("model_decision", request_context, {
+                    round = round,
+                    decision = "no_tool",
+                })
 
                 if content == "" then
+                    Observability.log("model_empty_response", request_context, {
+                        round = round,
+                        http_status = transport_metadata and transport_metadata.status_code or nil,
+                        response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
+                        done = decoded.done,
+                        done_reason = done_reason,
+                        prompt_eval_count = prompt_eval_count,
+                        eval_count = eval_count,
+                        total_tokens = total_tokens,
+                        context_exhausted = context_exhausted,
+                    })
+
                     callback(
                         nil,
-                        "No response from model"
+                        "No response from model",
+                        metadata
                     )
                     return
                 end
@@ -905,6 +1020,12 @@ local function call_round(
 
                 return
             end
+
+            Observability.log("model_decision", request_context, {
+                round = round,
+                decision = "tool_call",
+                tool_call_count = #tool_calls,
+            })
 
             -- Preserve Ollama's assistant
             -- tool-call message.
@@ -921,6 +1042,10 @@ local function call_round(
                 1,
                 messages,
                 function(tool_error, tool_metadata)
+
+                    if request_context and request_context.closed == true then
+                        return
+                    end
 
                     if tool_error then
                         callback(
@@ -944,6 +1069,7 @@ local function call_round(
                                 web_evidence_used = metadata.web_evidence_used,
                                 web_urls = metadata.web_urls,
                                 evidence_events = metadata.evidence_events,
+                                tool_calls = metadata.tool_calls,
                             }
                         )
 
@@ -956,9 +1082,12 @@ local function call_round(
                         tools,
                         round + 1,
                         callback,
-                        metadata
+                        metadata,
+                        request_context
                     )
-                end
+                end,
+                metadata,
+                request_context
             )
         end
     )
@@ -969,14 +1098,15 @@ function OllamaClient.call(
     system_prompt,
     conversation_history,
     tools,
-    callback
+    callback,
+    request_context
 )
     if type(callback) ~= "function" then
         return nil,
             "OllamaClient.call requires a callback"
     end
 
-    local metadata = new_metadata()
+    local metadata = new_metadata(request_context)
 
     local messages = {
         {
@@ -1005,7 +1135,8 @@ function OllamaClient.call(
         tools,
         1,
         callback,
-        metadata
+        metadata,
+        request_context
     )
 end
 
