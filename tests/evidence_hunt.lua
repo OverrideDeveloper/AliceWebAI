@@ -4,7 +4,7 @@
 
 local calls = {}
 
-package.loaded["webcall"] = {
+package.loaded["../lua-webcall-model/webcall"] = {
     post = function(url, body, options, callback)
         calls.url = url
         calls.body = body
