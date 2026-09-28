@@ -10,7 +10,6 @@ local M = {}
 M.config = {
     endpoint = "http://127.0.0.1:60005",
     timeout = 10000,
-    max_bytes = 512,
 }
 
 local function trim(value)
@@ -49,22 +48,29 @@ local function validate(arguments)
         return nil, "EvidenceGather index must not be negative"
     end
 
-    local max_bytes =
-        tonumber(arguments.max_bytes or M.config.max_bytes)
-        or M.config.max_bytes
-
-    max_bytes = math.floor(max_bytes)
-
-    if max_bytes < 1 then
-        return nil, "EvidenceGather max_bytes must be greater than zero"
-    end
-
-    return {
+    local request = {
         corpus = corpus,
         query = query,
         index = index,
-        max_bytes = max_bytes,
-    }, nil
+    }
+
+    if arguments.max_bytes ~= nil then
+        local max_bytes = tonumber(arguments.max_bytes)
+
+        if not max_bytes then
+            return nil, "EvidenceGather max_bytes must be an integer"
+        end
+
+        max_bytes = math.floor(max_bytes)
+
+        if max_bytes < 1 then
+            return nil, "EvidenceGather max_bytes must be greater than zero"
+        end
+
+        request.max_bytes = max_bytes
+    end
+
+    return request, nil
 end
 
 function M.gather(arguments, callback)
@@ -86,7 +92,10 @@ function M.gather(arguments, callback)
         "?corpus=" .. encode_component(request.corpus)
         .. "&i=" .. encode_component(request.index)
         .. "&query=" .. encode_component(request.query)
-        .. "&max_bytes=" .. encode_component(request.max_bytes)
+
+    if request.max_bytes ~= nil then
+        query = query .. "&max_bytes=" .. encode_component(request.max_bytes)
+    end
 
     webcall.get(
         M.config.endpoint .. "/local_data/getevidence" .. query,
