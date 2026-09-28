@@ -3,7 +3,7 @@
 -- Lua 5.1 / Luvit compatible.
 
 local json = require("./json")
-local webcall = require("webcall")
+local webcall = require("./lua-webcall-model/webcall")
 
 local M = {}
 
