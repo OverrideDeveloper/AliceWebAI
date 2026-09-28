@@ -41,12 +41,12 @@ assert(
     "EvidenceHunt must call the find evidence endpoint"
 )
 assert(
-    calls.body:find('"record_limit":5', 1, true),
-    "EvidenceHunt should apply the Rust API default record limit"
+    not calls.body:find('"record_limit"', 1, true),
+    "EvidenceHunt should let the Rust API own the record-limit default"
 )
 assert(
-    calls.body:find('"max_bytes":512', 1, true),
-    "EvidenceHunt should apply the Rust API default evidence budget"
+    not calls.body:find('"max_bytes"', 1, true),
+    "EvidenceHunt should let the Rust API own the evidence-budget default"
 )
 
 local invalid_error
