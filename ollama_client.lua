@@ -741,11 +741,12 @@ local function execute_tool_calls(
         tool_name = tool_name,
     })
 
+    local arguments =
+        decode_tool_arguments(
+            function_data.arguments or {}
+        )
+
     if tool_name == "web_search" then
-        local arguments =
-            decode_tool_arguments(
-                function_data.arguments or {}
-            )
 
         if type(arguments) == "table" then
             local bounded_error =
