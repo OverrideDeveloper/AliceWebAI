@@ -6,6 +6,134 @@ local Evidence = require("./evidence")
 
 local M = {}
 
+local TOOL_ARGUMENT_MAX_DEPTH = 4
+local TOOL_ARGUMENT_MAX_ITEMS = 32
+
+local function quote_tool_argument_string(value)
+    value = tostring(value)
+    value = value:gsub("\\", "\\\\")
+    value = value:gsub("\"", "\\\"")
+    value = value:gsub("\r", "\\r")
+    value = value:gsub("\n", "\\n")
+    value = value:gsub("\t", "\\t")
+    return "\"" .. value .. "\""
+end
+
+local function is_array_table(value)
+    if type(value) ~= "table" then
+        return false, 0
+    end
+
+    local count = 0
+
+    for key, _ in pairs(value) do
+        if type(key) ~= "number"
+           or key < 1
+           or key % 1 ~= 0 then
+            return false, 0
+        end
+
+        count = count + 1
+    end
+
+    for index = 1, count do
+        if value[index] == nil then
+            return false, 0
+        end
+    end
+
+    return true, count
+end
+
+local function sorted_object_keys(value)
+    local keys = {}
+
+    for key, _ in pairs(value) do
+        keys[#keys + 1] = key
+    end
+
+    table.sort(keys, function(left, right)
+        return tostring(left) < tostring(right)
+    end)
+
+    return keys
+end
+
+local function format_tool_argument(value, depth)
+    if value == nil then
+        return "null"
+    end
+
+    local value_type = type(value)
+
+    if value_type == "string" then
+        return quote_tool_argument_string(value)
+    end
+
+    if value_type == "number"
+       or value_type == "boolean" then
+        return tostring(value)
+    end
+
+    if value_type ~= "table" then
+        return "<" .. value_type .. ">"
+    end
+
+    if depth >= TOOL_ARGUMENT_MAX_DEPTH then
+        return "<max depth>"
+    end
+
+    local is_array, count = is_array_table(value)
+
+    if is_array then
+        if count == 0 then
+            return "[]"
+        end
+
+        local parts = {}
+        local limit = math.min(count, TOOL_ARGUMENT_MAX_ITEMS)
+
+        for index = 1, limit do
+            parts[#parts + 1] =
+                format_tool_argument(
+                    value[index],
+                    depth + 1
+                )
+        end
+
+        if count > limit then
+            parts[#parts + 1] = "<truncated>"
+        end
+
+        return "[" .. table.concat(parts, ", ") .. "]"
+    end
+
+    local parts = {}
+    local keys = sorted_object_keys(value)
+    local limit = math.min(#keys, TOOL_ARGUMENT_MAX_ITEMS)
+
+    for index = 1, limit do
+        local key = keys[index]
+        parts[#parts + 1] =
+            tostring(key)
+            .. ": "
+            .. format_tool_argument(
+                value[key],
+                depth + 1
+            )
+    end
+
+    if #keys > limit then
+        parts[#parts + 1] = "<truncated>"
+    end
+
+    if #parts == 0 then
+        return "{}"
+    end
+
+    return "{" .. table.concat(parts, ", ") .. "}"
+end
+
 local function split_claims(text)
     local claims = {}
     for sentence in tostring(text or ""):gmatch("[^.!?]+[.!?]?") do
@@ -103,6 +231,19 @@ function M.decorate(response, metadata)
                 "- %s",
                 name
             )
+
+            if type(tool_call.arguments) == "table" then
+                for _, key in ipairs(sorted_object_keys(tool_call.arguments)) do
+                    lines[#lines + 1] = string.format(
+                        "  %s: %s",
+                        tostring(key),
+                        format_tool_argument(
+                            tool_call.arguments[key],
+                            1
+                        )
+                    )
+                end
+            end
         end
 
         decorated = decorated .. "\n" .. table.concat(lines, "\n")
