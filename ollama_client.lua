@@ -781,6 +781,7 @@ local function execute_tool_calls(
     metadata.tool_calls[#metadata.tool_calls + 1] = {
         tool_name = tool_name,
         tool_round = request_context and request_context.tool_round or nil,
+        arguments = arguments,
     }
 
     execute_tool(
