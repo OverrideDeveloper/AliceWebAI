@@ -25,7 +25,7 @@ EvidenceGather.gather(
     {
         corpus = "wikipedia",
         index = 123,
-        query = "Ada Lovelace",
+        term_find = "Ada Lovelace",
     },
     function(value, failure)
         result = value
@@ -37,7 +37,7 @@ assert(err == nil, "EvidenceGather should return no error")
 assert(result.index == 123, "Record index should round-trip")
 assert(
     calls.url == "http://127.0.0.1:60005/local_data/getevidence?corpus=wikipedia&i=123&query=Ada%20Lovelace",
-    "EvidenceGather must call the get evidence endpoint with encoded parameters"
+    "EvidenceGather must translate term_find to the get evidence query parameter"
 )
 
 local invalid_error
@@ -45,7 +45,7 @@ EvidenceGather.gather(
     {
         corpus = "wikipedia",
         index = -1,
-        query = "Ada Lovelace",
+        term_find = "Ada Lovelace",
     },
     function(_, failure)
         invalid_error = failure
@@ -55,6 +55,24 @@ EvidenceGather.gather(
 assert(
     invalid_error and invalid_error.category == "invalid_request",
     "EvidenceGather must reject a negative index"
+)
+
+local missing_term_error
+EvidenceGather.gather(
+    {
+        corpus = "wikipedia",
+        index = 123,
+    },
+    function(_, failure)
+        missing_term_error = failure
+    end
+)
+
+assert(
+    missing_term_error
+        and missing_term_error.category == "invalid_request"
+        and missing_term_error.message == "EvidenceGather requires a term_find",
+    "EvidenceGather must require term_find"
 )
 
 print("evidence_gather.lua tests passed")
