@@ -1,4 +1,4 @@
-local https = require("https")
+local webcall = require("../webcall")
 
 local DuckDuckGo = {}
 DuckDuckGo.__index = DuckDuckGo
@@ -73,62 +73,61 @@ function DuckDuckGo.new(options)
     options = options or {}
     return setmetatable({
         name = "duckduckgo",
-        host = options.host or "html.duckduckgo.com",
-        path = options.path or "/html/",
+        base_url = options.base_url or "https://html.duckduckgo.com/html/",
         user_agent = options.user_agent or "lua-web-search/0.1",
+        timeout = options.timeout,
     }, DuckDuckGo)
 end
 
 function DuckDuckGo:search(query, max_results, callback)
-    local chunks = {}
-    local request = https.request({
-        host = self.host,
-        path = self.path .. "?q=" .. url_encode(query),
-        method = "GET",
+    local url = self.base_url .. "?q=" .. url_encode(query)
+
+    webcall.get(url, {
+        timeout = self.timeout,
         headers = {
             ["User-Agent"] = self.user_agent,
             ["Accept"] = "text/html,application/xhtml+xml",
-            ["Connection"] = "close",
         },
-    }, function(response)
-        response:on("data", function(chunk) chunks[#chunks + 1] = chunk end)
-        response:on("end", function()
-            local body = table.concat(chunks)
-            local status_code = tonumber(response.statusCode or response.code)
-            local status = classify(body, status_code)
-
-            if status == "access_challenge" then
-                callback({
-                    status = status,
-                    results = {},
-                    message = "DuckDuckGo returned an automated-access challenge.",
-                })
-                return
-            end
-
-            if status == "http_error" then
-                callback({
-                    status = status,
-                    results = {},
-                    message = "DuckDuckGo returned HTTP status " .. tostring(status_code),
-                })
-                return
-            end
-
-            local results = parse_results(body, max_results)
+    }, function(response, err)
+        if not response then
             callback({
-                status = #results > 0 and "success" or "zero_results",
-                results = results,
-                message = #results > 0 and nil
-                    or "DuckDuckGo returned a search page but no results were parsed.",
+                status = "network_error",
+                results = {},
+                message = tostring(err),
             })
-        end)
-    end)
+            return
+        end
 
-    request:on("error", function(err)
-        callback({ status = "network_error", results = {}, message = tostring(err) })
+        local status = classify(response.body, response.status)
+
+        if status == "access_challenge" then
+            callback({
+                status = status,
+                results = {},
+                message = "DuckDuckGo returned an automated-access challenge.",
+            })
+            return
+        end
+
+        if status == "http_error" then
+            callback({
+                status = status,
+                results = {},
+                message = err or (
+                    "DuckDuckGo returned HTTP status " .. tostring(response.status)
+                ),
+            })
+            return
+        end
+
+        local results = parse_results(response.body, max_results)
+        callback({
+            status = #results > 0 and "success" or "zero_results",
+            results = results,
+            message = #results > 0 and nil
+                or "DuckDuckGo returned a search page but no results were parsed.",
+        })
     end)
-    request:done()
 end
 
 DuckDuckGo._classify_response = classify
