@@ -26,7 +26,7 @@
 -- Lua 5.1 compatible
 
 local ConversationHandler = require("conversation_handler")
-local OllamaClient = require("./ollama_client")
+local LLMClient = require("./llm_client")
 local json = require("./json")
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
@@ -974,10 +974,10 @@ Observability.log("request_start", request_context, {
 
 log(
     "INFO",
-    "Calling Ollama asynchronously..."
+    "Calling LLM inference asynchronously..."
 )
 
-OllamaClient.call(
+LLMClient.call(
     system_prompt,
     recent_history(),
     available_tools,
