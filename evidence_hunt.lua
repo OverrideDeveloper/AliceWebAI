@@ -74,7 +74,23 @@ local function validate(arguments)
         request.max_bytes = max_bytes
     end
 
-    return request, nil
+    local timeout = M.config.timeout
+
+    if arguments.timeout ~= nil then
+        timeout = tonumber(arguments.timeout)
+
+        if not timeout then
+            return nil, "EvidenceHunt timeout must be an integer"
+        end
+
+        timeout = math.floor(timeout)
+
+        if timeout < 1 then
+            return nil, "EvidenceHunt timeout must be greater than zero"
+        end
+    end
+
+    return request, nil, timeout
 end
 
 function M.hunt(arguments, callback)
@@ -82,7 +98,8 @@ function M.hunt(arguments, callback)
         return nil, "EvidenceHunt requires a callback"
     end
 
-    local request, validation_error = validate(arguments)
+    local request, validation_error, timeout =
+        validate(arguments)
 
     if not request then
         callback(nil, {
@@ -107,7 +124,7 @@ function M.hunt(arguments, callback)
         M.config.endpoint .. "/local_data/findevidence",
         payload,
         {
-            timeout = M.config.timeout,
+            timeout = timeout,
             headers = {
                 ["Content-Type"] = "application/json",
                 ["Accept"] = "application/json",
@@ -181,6 +198,11 @@ M.definition = {
                     type = "integer",
                     description =
                         "Maximum evidence budget per returned record in bytes. Defaults to 512."
+                },
+                timeout = {
+                    type = "integer",
+                    description =
+                        "HTTP request timeout in milliseconds. Defaults to 10000."
                 },
             },
             required = {"corpus", "query"},

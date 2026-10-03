@@ -49,6 +49,27 @@ assert(
     "EvidenceHunt should let the Rust API own the evidence-budget default"
 )
 
+local custom_limit_error
+EvidenceHunt.hunt(
+    {
+        corpus = "wikipedia",
+        query = "Ada Lovelace",
+        record_limit = 20,
+    },
+    function(_, failure)
+        custom_limit_error = failure
+    end
+)
+
+assert(
+    custom_limit_error == nil,
+    "EvidenceHunt should accept a record_limit greater than the API default"
+)
+assert(
+    calls.body:find('"record_limit":20', 1, true),
+    "EvidenceHunt must forward an explicit record_limit without imposing a smaller tool-side limit"
+)
+
 local invalid_error
 EvidenceHunt.hunt(
     {

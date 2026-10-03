@@ -17,7 +17,7 @@
 -- You should have received a copy of the GNU General Public License
 -- along with Alice Web AI. If not, see
 -- <https://www.gnu.org/licenses/>.
-
+--
 -- ollama_client.lua
 -- Asynchronous Luvit HTTP client for Ollama.
 -- Lua 5.1 compatible.
@@ -523,9 +523,13 @@ local function execute_tool(
                 function(result, err)
 
                     if err then
+                        -- Preserve structured tool errors so the
+                        -- caller can serialize category/message/etc.
+                        -- instead of collapsing the error into
+                        -- "table: 0x...".
                         callback(
                             nil,
-                            tostring(result or err)
+                            err
                         )
                         return
                     end
@@ -678,7 +682,7 @@ end
 local function normalized_search_query(value)
     return tostring(value or "")
         :lower()
-        :gsub("%s+", " ")
+        :gsub("%s+"," ")
         :match("^%s*(.-)%s*$")
 end
 
@@ -737,11 +741,12 @@ local function execute_tool_calls(
         tool_name = tool_name,
     })
 
+    local arguments =
+        decode_tool_arguments(
+            function_data.arguments or {}
+        )
+
     if tool_name == "web_search" then
-        local arguments =
-            decode_tool_arguments(
-                function_data.arguments or {}
-            )
 
         if type(arguments) == "table" then
             local bounded_error =
@@ -777,6 +782,7 @@ local function execute_tool_calls(
     metadata.tool_calls[#metadata.tool_calls + 1] = {
         tool_name = tool_name,
         tool_round = request_context and request_context.tool_round or nil,
+        arguments = arguments,
     }
 
     execute_tool(

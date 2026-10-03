@@ -27,15 +27,15 @@ local function validate(arguments)
     arguments = arguments or {}
 
     local corpus = trim(arguments.corpus)
-    local query = trim(arguments.query)
+    local term_find = trim(arguments.term_find)
     local index = tonumber(arguments.index)
 
     if corpus == "" then
         return nil, "EvidenceGather requires a corpus"
     end
 
-    if query == "" then
-        return nil, "EvidenceGather requires a query"
+    if term_find == "" then
+        return nil, "EvidenceGather requires a term_find"
     end
 
     if not index then
@@ -50,7 +50,7 @@ local function validate(arguments)
 
     local request = {
         corpus = corpus,
-        query = query,
+        query = term_find,
         index = index,
     }
 
@@ -70,7 +70,23 @@ local function validate(arguments)
         request.max_bytes = max_bytes
     end
 
-    return request, nil
+    local timeout = M.config.timeout
+
+    if arguments.timeout ~= nil then
+        timeout = tonumber(arguments.timeout)
+
+        if not timeout then
+            return nil, "EvidenceGather timeout must be an integer"
+        end
+
+        timeout = math.floor(timeout)
+
+        if timeout < 1 then
+            return nil, "EvidenceGather timeout must be greater than zero"
+        end
+    end
+
+    return request, nil, timeout
 end
 
 function M.gather(arguments, callback)
@@ -78,7 +94,8 @@ function M.gather(arguments, callback)
         return nil, "EvidenceGather requires a callback"
     end
 
-    local request, validation_error = validate(arguments)
+    local request, validation_error, timeout =
+        validate(arguments)
 
     if not request then
         callback(nil, {
@@ -100,7 +117,7 @@ function M.gather(arguments, callback)
     webcall.get(
         M.config.endpoint .. "/local_data/getevidence" .. query,
         {
-            timeout = M.config.timeout,
+            timeout = timeout,
             headers = {
                 ["Accept"] = "application/json",
             },
@@ -147,8 +164,8 @@ M.definition = {
         description =
             "Retrieve bounded evidence from one specific authoritative "
             .. "local data record. Use this after EvidenceHunt identifies "
-            .. "a relevant record. The index identifies the record and the "
-            .. "query selects the structural evidence to return. The corpus "
+            .. "a relevant record. The index identifies the record and "
+            .. "term_find selects the structural evidence to return. The corpus "
             .. "must match the corpus used by EvidenceHunt.",
         parameters = {
             type = "object",
@@ -163,18 +180,26 @@ M.definition = {
                     description =
                         "Authoritative record index returned by EvidenceHunt."
                 },
-                query = {
+                term_find = {
                     type = "string",
                     description =
-                        "Text used to select the structural evidence from the record."
+                        "A word, term, or phrase to find by lexical matching "
+                        .. "within the record selected by index. "
+                        .. "Use text expected to occur in the record. "
+                        .. "Do not provide a question, summary request, or instruction."
                 },
                 max_bytes = {
                     type = "integer",
                     description =
                         "Maximum evidence budget in bytes. Defaults to 512."
                 },
+                timeout = {
+                    type = "integer",
+                    description =
+                        "HTTP request timeout in milliseconds. Defaults to 10000."
+                },
             },
-            required = {"corpus", "index", "query"},
+            required = {"corpus", "index", "term_find"},
         },
     },
 }
