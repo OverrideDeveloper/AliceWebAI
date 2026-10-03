@@ -2,6 +2,7 @@
 -- Targets the OpenAI-compatible chat completion endpoint exposed by
 -- llama.cpp's server.
 
+local http = require("http")
 local https = require("https")
 local json = require("./lunajson/lunajson")
 
@@ -20,6 +21,7 @@ function LlamaCpp.new(options)
         port = options.port or 50006,
         path = options.path or "/v1/chat/completions",
         model = options.model,
+        scheme = options.scheme or "http",
         timeout = options.timeout or 120,
         user_agent = options.user_agent or "lua-llama-interface/0.1",
     }, LlamaCpp)
@@ -49,14 +51,23 @@ function LlamaCpp:_request(method, path, body, callback)
         headers["Content-Length"] = tostring(#encoded_body)
     end
 
+    local transport = self.scheme == "https" and https or http
+
+    local request_options = {
+        host = self.host,
+        port = self.port,
+        path = path,
+        method = method,
+        headers = headers,
+    }
+
+    if self.scheme == "https" then
+        request_options.secureProtocol = "TLS_client"
+        request_options.hostname = self.host
+    end
+
     local ok, req_or_error = pcall(function()
-        return https.request({
-            host = self.host,
-            port = self.port,
-            path = path,
-            method = method,
-            headers = headers,
-        }, function(res)
+        return transport.request(request_options, function(res)
             local status = tonumber(res.statusCode or res.code or 0)
 
             res:on("data", function(chunk)
@@ -95,6 +106,12 @@ function LlamaCpp:_request(method, path, body, callback)
 
                 finish(decoded, nil, metadata)
             end)
+
+            res:on("error", function(err)
+                finish(nil, "llama.cpp response error: " .. tostring(err), {
+                    status_code = status,
+                })
+            end)
         end)
     end)
 
@@ -124,10 +141,9 @@ function LlamaCpp:_request(method, path, body, callback)
 
     if encoded_body then
         req_or_error:write(encoded_body)
-        req_or_error:done()
-    else
-        req_or_error:done()
     end
+
+    req_or_error:done()
 end
 
 function LlamaCpp:status(callback)
