@@ -59,6 +59,17 @@ The DuckDuckGo provider uses the HTML endpoint and detects the automated-access 
 
 Offline providers are intentionally part of the architecture but are not implemented yet. The intended next provider is a local Wikipedia corpus/search endpoint.
 
+## Transport
+
+The search engine vendors the small `lua-webcall-model` transport module as `webcall.lua`.
+Providers use that transport boundary for HTTP/HTTPS requests while keeping provider-specific
+response classification and parsing in the provider itself.
+
+The vendored module is licensed under the MIT License; its original license text is included
+in `webcall-LICENSE`.
+
 ## Runtime
 
 The MVP is written for the Lua/Luvit-style asynchronous HTTP model used by AliceWebAI.
+
+Runtime validation could not be performed in this environment because a Lua/Luvit runtime is not available here.
