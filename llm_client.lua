@@ -425,7 +425,7 @@ local function serialize_tool_result(result)
         .. tostring(encode_error)
 end
 
-OllamaClient._serialize_tool_result = serialize_tool_result
+LLMClient._serialize_tool_result = serialize_tool_result
 
 
 local function make_tool_result_message(
