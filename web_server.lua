@@ -626,17 +626,6 @@ local function handle_message(req, res)
             request_context.inference_timeout =
                 data.timeout
 
-            if data.timeout ~= nil and
-               (type(data.timeout) ~= "number" or
-                data.timeout < 0) then
-                send_json(res, 400, {
-                    error = "Timeout must be a non-negative number"
-                })
-                return
-            end
-
-            request_context.inference_timeout = data.timeout
-
             alice.process_user_input(
                 input,
                 function(response, err)
