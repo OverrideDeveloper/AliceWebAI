@@ -54,7 +54,7 @@ function LlamaInterface:chat(messages, options, callback)
         message_count = #messages,
     })
 
-    self.backend:chat(messages, options, function(response, err, metadata)
+    return self.backend:chat(messages, options, function(response, err, metadata)
         if err then
             self:_emit({
                 event = "inference_failed",
