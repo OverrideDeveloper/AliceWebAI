@@ -260,9 +260,39 @@ along with Alice Web AI. If not, see
       background: #334933;
     }
 
-    #send-btn:disabled {
+    #send-btn:disabled,
+    #stop-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    #stop-btn {
+      min-height: 44px;
+      padding: 12px 18px;
+      background: #4a3030;
+      color: #ead0d0;
+      border: 1px solid #694545;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    #stop-btn:hover {
+      background: #5a3838;
+    }
+
+    #timeout-input {
+      width: 90px;
+      min-height: 44px;
+      box-sizing: border-box;
+      padding: 10px;
+      background: #0f0f0f;
+      color: var(--text);
+      border: 1px solid #383838;
+      border-radius: 6px;
+      font-size: 14px;
     }
 
     .loading {
@@ -386,7 +416,17 @@ along with Alice Web AI. If not, see
       rows="1"
     ></textarea>
 
+    <input
+      id="timeout-input"
+      type="number"
+      min="0"
+      step="1"
+      placeholder="Timeout"
+      title="Optional per-request timeout in seconds; blank means no timeout"
+    >
+
     <button id="send-btn" type="button">Send</button>
+    <button id="stop-btn" type="button" disabled>Stop</button>
   </div>
 </div>
 
@@ -402,6 +442,16 @@ along with Alice Web AI. If not, see
 
     const sendBtn =
       document.getElementById("send-btn");
+
+    const stopBtn =
+      document.getElementById("stop-btn");
+
+    const timeoutInput =
+      document.getElementById("timeout-input");
+
+    let activeRequestId = null;
+    let cancelRequested = false;
+    let loadingMsg = null;
 
     const identityStatus =
       document.getElementById("identity-status");
@@ -725,6 +775,75 @@ along with Alice Web AI. If not, see
     }
 
 
+    async function stopMessage() {
+      if (!activeRequestId) {
+        return;
+      }
+
+      cancelRequested = true;
+
+      const requestId =
+        activeRequestId;
+
+      stopBtn.disabled = true;
+
+      try {
+        const response =
+          await fetch(
+            "/api/stop",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+              credentials: "same-origin",
+              body: JSON.stringify({
+                request_id:
+                  requestId
+              })
+            }
+          );
+
+        const data =
+          await readJsonResponse(
+            response
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+            response.status
+          );
+        }
+
+        if (
+          loadingMsg &&
+          loadingMsg.parentNode
+        ) {
+          loadingMsg.remove();
+        }
+
+        addMessage(
+          "Operation stopped.",
+          "assistant"
+        );
+
+      }
+      catch (err) {
+        cancelRequested = false;
+
+        addMessage(
+          "Stop error: " +
+          err.message,
+          "error"
+        );
+
+        stopBtn.disabled = false;
+      }
+    }
+
+
     async function sendMessage() {
       const input =
         inputField.value.trim();
@@ -747,8 +866,21 @@ along with Alice Web AI. If not, see
         "auto";
 
       sendBtn.disabled = true;
+      stopBtn.disabled = false;
+      cancelRequested = false;
 
-      const loadingMsg =
+      const clientRequestId =
+        "web-" +
+        Date.now() +
+        "-" +
+        Math.random()
+          .toString(16)
+          .slice(2);
+
+      activeRequestId =
+        clientRequestId;
+
+      loadingMsg =
         document.createElement("div");
 
       loadingMsg.className =
@@ -778,7 +910,13 @@ along with Alice Web AI. If not, see
               body: JSON.stringify({
                 message: input,
                 behaviors:
-                  getBehaviorSettings()
+                  getBehaviorSettings(),
+                request_id:
+                  clientRequestId,
+                timeout:
+                  timeoutInput.value.trim() === ""
+                    ? null
+                    : Number(timeoutInput.value)
               })
             }
           );
@@ -798,16 +936,22 @@ along with Alice Web AI. If not, see
             );
         }
         catch (parseError) {
-          addMessage(
-            "Error: " +
-            parseError.message,
-            "error"
-          );
+          if (!cancelRequested) {
+            addMessage(
+              "Error: " +
+              parseError.message,
+              "error"
+            );
+          }
 
           return;
         }
 
         if (!response.ok) {
+          if (cancelRequested) {
+            return;
+          }
+
           addMessage(
             "Error: " +
             (
@@ -834,14 +978,21 @@ along with Alice Web AI. If not, see
           loadingMsg.remove();
         }
 
-        addMessage(
-          "Network error: " +
-          err.message,
-          "error"
-        );
+        if (!cancelRequested) {
+          addMessage(
+            "Network error: " +
+            err.message,
+            "error"
+          );
+        }
 
       }
       finally {
+        if (activeRequestId === clientRequestId) {
+          activeRequestId = null;
+        }
+
+        stopBtn.disabled = true;
         sendBtn.disabled = false;
         inputField.focus();
       }
@@ -865,6 +1016,11 @@ along with Alice Web AI. If not, see
     sendBtn.addEventListener(
       "click",
       sendMessage
+    );
+
+    stopBtn.addEventListener(
+      "click",
+      stopMessage
     );
 
 
