@@ -884,7 +884,8 @@ function Alice.process_user_input(
 user_input,
 callback,
 web_behaviors,
-identity
+identity,
+request_context
 )
 if type(callback) ~= "function" then
 return nil,
@@ -954,7 +955,7 @@ if not save_history() then
     )
 end
 
-local request_context = Observability.new_context({
+request_context = request_context or Observability.new_context({
     user_id = identity and (identity.id or identity.user_id) or nil,
     provider = identity and identity.provider or nil,
 })
@@ -1087,6 +1088,12 @@ LLMClient.call(
 
 
 end
+
+function Alice.cancel_request(request_id)
+    local LLMClient = require("./llm_client")
+    return LLMClient.cancel(request_id)
+end
+
 
 function Alice.get_history()
 return conversation_history
