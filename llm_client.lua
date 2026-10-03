@@ -61,6 +61,7 @@ LLMClient.config = {
         port = 50006,
         path = "/v1/chat/completions",
         timeout = 120,
+        debug_requests = true,
     },
     max_tool_rounds = 4,
 }
