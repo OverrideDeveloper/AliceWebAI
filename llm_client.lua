@@ -39,6 +39,7 @@ local Evidence = require("./evidence")
 local Observability = require("./observability")
 
 local LLMClient = {}
+local active_requests = {}
 
 
 local function new_metadata(request_context)
@@ -60,7 +61,7 @@ LLMClient.config = {
         host = "127.0.0.1",
         port = 50006,
         path = "/v1/chat/completions",
-        timeout = 120,
+        timeout = nil,
         debug_requests = true,
     },
     max_tool_rounds = 4,
@@ -654,6 +655,10 @@ local function call_round(
         options.tools = tools
     end
 
+    if request_context and request_context.inference_timeout ~= nil then
+        options.timeout = request_context.inference_timeout
+    end
+
     print(
         string.format(
             "[LLM tool round %d]",
@@ -661,7 +666,7 @@ local function call_round(
         )
     )
 
-    LLMClient.interface:chat(
+    local cancel_inference = LLMClient.interface:chat(
         messages,
         options,
         function(
@@ -669,6 +674,8 @@ local function call_round(
             request_error,
             inference_metadata
         )
+            request_context.cancel_inference = nil
+
             if request_error then
                 Observability.log("model_response_received", request_context, {
                     round = round,
@@ -856,6 +863,10 @@ local function call_round(
             )
         end
     )
+
+    if request_context then
+        request_context.cancel_inference = cancel_inference
+    end
 end
 
 
@@ -872,6 +883,14 @@ function LLMClient.call(
     end
 
     local metadata = new_metadata(request_context)
+
+    if request_context then
+        request_context.inference_timeout =
+            request_context.inference_timeout
+            or LLMClient.config.backend.timeout
+        active_requests[request_context.request_id] =
+            request_context
+    end
 
     local messages = {
         {
@@ -894,15 +913,42 @@ function LLMClient.call(
         )
     end
 
+    local function complete(response, err, result_metadata)
+        if request_context then
+            active_requests[request_context.request_id] = nil
+            request_context.cancel_inference = nil
+        end
+
+        callback(response, err, result_metadata)
+    end
+
     call_round(
         system_prompt,
         messages,
         tools,
         1,
-        callback,
+        complete,
         metadata,
         request_context
     )
+end
+
+
+function LLMClient.cancel(request_id)
+    local context = active_requests[request_id]
+
+    if not context then
+        return false, "No active request"
+    end
+
+    context.closed = true
+
+    if type(context.cancel_inference) == "function" then
+        context.cancel_inference()
+        return true
+    end
+
+    return true
 end
 
 
