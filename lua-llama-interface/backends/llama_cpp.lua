@@ -20,6 +20,7 @@ function LlamaCpp.new(options)
         port = options.port or 50006,
         path = options.path or "/v1/chat/completions",
         model = options.model,
+        timeout = options.timeout or 120,
         user_agent = options.user_agent or "lua-llama-interface/0.1",
     }, LlamaCpp)
 end
@@ -107,6 +108,19 @@ function LlamaCpp:_request(method, path, body, callback)
     req_or_error:on("error", function(err)
         finish(nil, "llama.cpp request error: " .. tostring(err))
     end)
+
+    req_or_error:setTimeout(
+        self.timeout * 1000,
+        function()
+            finish(
+                nil,
+                "llama.cpp request timed out after "
+                    .. tostring(self.timeout)
+                    .. " seconds"
+            )
+            req_or_error:destroy()
+        end
+    )
 
     if encoded_body then
         req_or_error:write(encoded_body)
