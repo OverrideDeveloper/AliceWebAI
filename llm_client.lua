@@ -40,6 +40,7 @@ local Observability = require("./observability")
 
 local LLMClient = {}
 local active_requests = {}
+local active_requests = {}
 
 
 local function new_metadata(request_context)
@@ -659,6 +660,10 @@ local function call_round(
         options.timeout = request_context.inference_timeout
     end
 
+    if request_context and request_context.inference_timeout ~= nil then
+        options.timeout = request_context.inference_timeout
+    end
+
     print(
         string.format(
             "[LLM tool round %d]",
@@ -675,6 +680,10 @@ local function call_round(
             inference_metadata
         )
             request_context.cancel_inference = nil
+
+            if request_context then
+                request_context.cancel_inference = nil
+            end
 
             if request_error then
                 Observability.log("model_response_received", request_context, {
