@@ -126,7 +126,7 @@ function LlamaCpp:_request(method, path, body, callback)
         req_or_error:write(encoded_body)
         req_or_error:done()
     else
-        req_or_error:finish()
+        req_or_error:done()
     end
 end
 
