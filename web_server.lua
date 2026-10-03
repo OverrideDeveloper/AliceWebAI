@@ -578,8 +578,13 @@ local function handle_message(req, res)
                     data.behaviors
                 )
 
-            local request_id = Observability.new_request_id()
+            local request_id = data.request_id
+            if type(request_id) ~= "string" or request_id == "" then
+                request_id = Observability.new_request_id()
+            end
+
             local request_context = Observability.new_context({
+
                 request_id = request_id,
                 user_id = identity and identity.user_id or nil,
                 provider = identity and identity.provider or nil,
@@ -620,6 +625,17 @@ local function handle_message(req, res)
 
             request_context.inference_timeout =
                 data.timeout
+
+            if data.timeout ~= nil and
+               (type(data.timeout) ~= "number" or
+                data.timeout < 0) then
+                send_json(res, 400, {
+                    error = "Timeout must be a non-negative number"
+                })
+                return
+            end
+
+            request_context.inference_timeout = data.timeout
 
             alice.process_user_input(
                 input,
