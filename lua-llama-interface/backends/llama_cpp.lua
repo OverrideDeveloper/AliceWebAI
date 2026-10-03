@@ -150,6 +150,11 @@ function LlamaCpp:chat(messages, options, callback)
         seed = true,
         stop = true,
         response_format = true,
+        tools = true,
+        tool_choice = true,
+        parallel_tool_calls = true,
+        chat_template_kwargs = true,
+        reasoning_format = true,
     }
 
     for key in pairs(passthrough) do
@@ -175,6 +180,7 @@ function LlamaCpp:chat(messages, options, callback)
         local usage = result.usage or {}
         metadata = metadata or {}
         metadata.model = result.model
+        metadata.finish_reason = choice.finish_reason
         metadata.prompt_tokens = usage.prompt_tokens
         metadata.completion_tokens = usage.completion_tokens
         metadata.total_tokens = usage.total_tokens
