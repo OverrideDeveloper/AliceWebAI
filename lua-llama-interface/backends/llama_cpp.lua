@@ -24,6 +24,7 @@ function LlamaCpp.new(options)
         scheme = options.scheme or "http",
         timeout = options.timeout or 120,
         user_agent = options.user_agent or "lua-llama-interface/0.1",
+        debug_requests = options.debug_requests or false,
     }, LlamaCpp)
 end
 
@@ -40,6 +41,12 @@ function LlamaCpp:_request(method, path, body, callback)
     end
 
     local encoded_body = body and json.encode(body) or nil
+
+    if self.debug_requests and encoded_body then
+        print("[LLAMA REQUEST BODY]")
+        print(encoded_body)
+        print("[END LLAMA REQUEST BODY]")
+    end
     local headers = {
         ["User-Agent"] = self.user_agent,
         ["Accept"] = "application/json",
