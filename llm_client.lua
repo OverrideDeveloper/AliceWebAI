@@ -660,10 +660,6 @@ local function call_round(
         options.timeout = request_context.inference_timeout
     end
 
-    if request_context and request_context.inference_timeout ~= nil then
-        options.timeout = request_context.inference_timeout
-    end
-
     print(
         string.format(
             "[LLM tool round %d]",
@@ -679,8 +675,6 @@ local function call_round(
             request_error,
             inference_metadata
         )
-            request_context.cancel_inference = nil
-
             if request_context then
                 request_context.cancel_inference = nil
             end
@@ -922,13 +916,26 @@ function LLMClient.call(
         )
     end
 
+    local completed = false
+
     local function complete(response, err, result_metadata)
+        if completed then
+            return
+        end
+
+        completed = true
+
         if request_context then
             active_requests[request_context.request_id] = nil
             request_context.cancel_inference = nil
+            request_context.complete = nil
         end
 
         callback(response, err, result_metadata)
+    end
+
+    if request_context then
+        request_context.complete = complete
     end
 
     call_round(
@@ -952,9 +959,19 @@ function LLMClient.cancel(request_id)
 
     context.closed = true
 
+    if type(context.complete) == "function" then
+        context.complete(
+            nil,
+            "llama.cpp request cancelled",
+            {
+                cancelled = true,
+                request_id = request_id,
+            }
+        )
+    end
+
     if type(context.cancel_inference) == "function" then
         context.cancel_inference()
-        return true
     end
 
     return true
