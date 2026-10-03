@@ -22,13 +22,13 @@ function LlamaCpp.new(options)
         path = options.path or "/v1/chat/completions",
         model = options.model,
         scheme = options.scheme or "http",
-        timeout = options.timeout or 120,
+        timeout = options.timeout,
         user_agent = options.user_agent or "lua-llama-interface/0.1",
         debug_requests = options.debug_requests or false,
     }, LlamaCpp)
 end
 
-function LlamaCpp:_request(method, path, body, callback)
+function LlamaCpp:_request(method, path, body, callback, request_timeout)
     local chunks = {}
     local completed = false
 
@@ -133,24 +133,50 @@ function LlamaCpp:_request(method, path, body, callback)
         finish(nil, "llama.cpp request error: " .. tostring(err))
     end)
 
-    req_or_error:setTimeout(
-        self.timeout * 1000,
-        function()
-            finish(
-                nil,
-                "llama.cpp request timed out after "
-                    .. tostring(self.timeout)
-                    .. " seconds"
-            )
-            req_or_error:destroy()
+    local timeout = request_timeout
+    if timeout == nil then
+        timeout = self.timeout
+    end
+
+    if timeout and tonumber(timeout) and tonumber(timeout) > 0 then
+        req_or_error:setTimeout(
+            tonumber(timeout) * 1000,
+            function()
+                finish(
+                    nil,
+                    "llama.cpp request timed out after "
+                        .. tostring(timeout)
+                        .. " seconds"
+                )
+                req_or_error:destroy()
+            end
+        )
+    end
+
+    local cancelled = false
+
+    local function cancel()
+        if cancelled or completed then
+            return
         end
-    )
+
+        cancelled = true
+
+        finish(
+            nil,
+            "llama.cpp request cancelled"
+        )
+
+        req_or_error:destroy()
+    end
 
     if encoded_body then
         req_or_error:write(encoded_body)
     end
 
     req_or_error:done()
+
+    return cancel
 end
 
 function LlamaCpp:status(callback)
@@ -200,7 +226,7 @@ function LlamaCpp:chat(messages, options, callback)
         end
     end
 
-    self:_request("POST", self.path, body, function(result, err, metadata)
+    return self:_request("POST", self.path, body, function(result, err, metadata)
         if err then
             callback(nil, err, metadata)
             return
@@ -223,7 +249,7 @@ function LlamaCpp:chat(messages, options, callback)
         metadata.total_tokens = usage.total_tokens
 
         callback(choice.message, nil, metadata)
-    end)
+    end, options.timeout)
 end
 
 return LlamaCpp
