@@ -959,6 +959,9 @@ function LLMClient.cancel(request_id)
 
     context.closed = true
 
+    local cancel_inference =
+        context.cancel_inference
+
     if type(context.complete) == "function" then
         context.complete(
             nil,
@@ -970,8 +973,8 @@ function LLMClient.cancel(request_id)
         )
     end
 
-    if type(context.cancel_inference) == "function" then
-        context.cancel_inference()
+    if type(cancel_inference) == "function" then
+        cancel_inference()
     end
 
     return true
