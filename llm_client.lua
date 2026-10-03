@@ -18,11 +18,11 @@
 -- along with Alice Web AI. If not, see
 -- <https://www.gnu.org/licenses/>.
 --
--- ollama_client.lua
--- Asynchronous Luvit HTTP client for Ollama.
+-- llm_client.lua
+-- Asynchronous Luvit client for the configured local LLM inference backend.
 -- Lua 5.1 compatible.
 --
--- Supports Ollama tool calling through asynchronous tool rounds.
+-- Alice owns the agent/tool loop; lua-llama-interface owns inference transport.
 
 local json = require("./json")
 local LlamaInterface = require("./lua-llama-interface/llama_interface")
@@ -60,6 +60,7 @@ LLMClient.config = {
         host = "127.0.0.1",
         port = 50006,
         path = "/v1/chat/completions",
+        timeout = 120,
     },
     max_tool_rounds = 4,
 }
