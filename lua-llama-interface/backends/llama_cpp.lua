@@ -124,7 +124,7 @@ function LlamaCpp:_request(method, path, body, callback)
 
     if encoded_body then
         req_or_error:write(encoded_body)
-        req_or_error:finish()
+        req_or_error:done()
     else
         req_or_error:finish()
     end
