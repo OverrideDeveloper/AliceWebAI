@@ -626,6 +626,16 @@ local function handle_message(req, res)
             request_context.inference_timeout =
                 data.timeout
 
+            -- Long-running inference must not be killed by Luvit's
+            -- default server socket timeout. The inference layer owns
+            -- the optional operation timeout; keep this HTTP connection
+            -- alive until that operation completes or the human cancels it.
+            req.socket:setTimeout(0)
+
+            res:once("finish", function()
+                req.socket:setTimeout(120 * 1000)
+            end)
+
             alice.process_user_input(
                 input,
                 function(response, err)
