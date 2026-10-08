@@ -40,7 +40,6 @@ local Observability = require("./observability")
 
 local LLMClient = {}
 local active_requests = {}
-local active_requests = {}
 
 
 local function new_metadata(request_context)
@@ -63,9 +62,9 @@ LLMClient.config = {
         port = 50006,
         path = "/v1/chat/completions",
         timeout = nil,
-        debug_requests = true,
+        debug_requests = false,
     },
-    max_tool_rounds = 4,
+    max_tool_rounds = 8,
 }
 
 LLMClient.interface = LlamaInterface.new({
