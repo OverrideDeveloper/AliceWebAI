@@ -26,7 +26,7 @@
 -- Lua 5.1 compatible
 
 local ConversationHandler = require("conversation_handler")
-local OllamaClient = require("./ollama_client")
+local LLMClient = require("./llm_client")
 local json = require("./json")
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
@@ -884,7 +884,8 @@ function Alice.process_user_input(
 user_input,
 callback,
 web_behaviors,
-identity
+identity,
+request_context
 )
 if type(callback) ~= "function" then
 return nil,
@@ -954,7 +955,7 @@ if not save_history() then
     )
 end
 
-local request_context = Observability.new_context({
+request_context = request_context or Observability.new_context({
     user_id = identity and (identity.id or identity.user_id) or nil,
     provider = identity and identity.provider or nil,
 })
@@ -974,10 +975,10 @@ Observability.log("request_start", request_context, {
 
 log(
     "INFO",
-    "Calling Ollama asynchronously..."
+    "Calling LLM inference asynchronously..."
 )
 
-OllamaClient.call(
+LLMClient.call(
     system_prompt,
     recent_history(),
     available_tools,
@@ -1087,6 +1088,18 @@ OllamaClient.call(
 
 
 end
+
+function Alice.cancel_request(request_id)
+    local LLMClient = require("./llm_client")
+    return LLMClient.cancel(request_id)
+end
+
+
+function Alice.cancel_request(request_id)
+    local LLMClient = require("./llm_client")
+    return LLMClient.cancel(request_id)
+end
+
 
 function Alice.get_history()
 return conversation_history

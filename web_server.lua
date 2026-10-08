@@ -578,8 +578,13 @@ local function handle_message(req, res)
                     data.behaviors
                 )
 
-            local request_id = Observability.new_request_id()
+            local request_id = data.request_id
+            if type(request_id) ~= "string" or request_id == "" then
+                request_id = Observability.new_request_id()
+            end
+
             local request_context = Observability.new_context({
+
                 request_id = request_id,
                 user_id = identity and identity.user_id or nil,
                 provider = identity and identity.provider or nil,
@@ -608,6 +613,28 @@ local function handle_message(req, res)
                 "[INFO] Name: " ..
                 tostring(identity.name)
             )
+
+            if data.timeout ~= nil and
+               (type(data.timeout) ~= "number" or
+                data.timeout < 0) then
+                send_json(res, 400, {
+                    error = "Timeout must be a non-negative number"
+                })
+                return
+            end
+
+            request_context.inference_timeout =
+                data.timeout
+
+            -- Long-running inference must not be killed by Luvit's
+            -- default server socket timeout. The inference layer owns
+            -- the optional operation timeout; keep this HTTP connection
+            -- alive until that operation completes or the human cancels it.
+            req.socket:setTimeout(0)
+
+            res:once("finish", function()
+                req.socket:setTimeout(120 * 1000)
+            end)
 
             alice.process_user_input(
                 input,
@@ -660,7 +687,8 @@ local function handle_message(req, res)
                     })
                 end,
                 behaviors,
-                identity
+                identity,
+                request_context
             )
         end
     )
@@ -754,6 +782,60 @@ local function handle_request(req, res)
         return
     end
 
+    if req.method == "POST" and
+       req.url == "/api/stop" then
+
+        local body = nil
+        read_request_body(req, function(request_body, body_error)
+            if body_error then
+                send_json(res, 400, {
+                    error = "Unable to read request: " .. tostring(body_error)
+                })
+                return
+            end
+
+            local ok, data = pcall(json.decode, request_body or "")
+            if not ok or type(data) ~= "table" then
+                send_json(res, 400, {
+                    error = "Invalid JSON request"
+                })
+                return
+            end
+
+            local request_id = data.request_id
+
+            if type(request_id) ~= "string" or request_id == "" then
+                send_json(res, 400, {
+                    error = "Request ID is required"
+                })
+                return
+            end
+
+            local cancelled, cancel_error =
+                alice.cancel_request(request_id)
+
+            if not cancelled then
+                send_json(res, 404, {
+                    error = cancel_error or "No active request",
+                    request_id = request_id,
+                })
+                return
+            end
+
+            Observability.log("http_message_cancelled", nil, {
+                request_id = request_id,
+            })
+
+            send_json(res, 200, {
+                cancelled = true,
+                request_id = request_id,
+            })
+        end)
+
+        return
+    end
+
+
 
     if req.method == "GET" and
        req.url == "/api/status" then
@@ -822,4 +904,3 @@ print(
 print(
     "[INFO] Anonymous access is permitted"
 )
-

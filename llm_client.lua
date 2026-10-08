@@ -18,14 +18,15 @@
 -- along with Alice Web AI. If not, see
 -- <https://www.gnu.org/licenses/>.
 --
--- ollama_client.lua
--- Asynchronous Luvit HTTP client for Ollama.
+-- llm_client.lua
+-- Asynchronous Luvit client for the configured local LLM inference backend.
 -- Lua 5.1 compatible.
 --
--- Supports Ollama tool calling through asynchronous tool rounds.
+-- Alice owns the agent/tool loop; lua-llama-interface owns inference transport.
 
-local http = require("http")
 local json = require("./json")
+local LlamaInterface = require("./lua-llama-interface/llama_interface")
+local LlamaCpp = require("./lua-llama-interface/backends/llama_cpp")
 
 local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
@@ -37,7 +38,8 @@ local EvidenceGather = require("./evidence_gather")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
-local OllamaClient = {}
+local LLMClient = {}
+local active_requests = {}
 
 
 local function new_metadata(request_context)
@@ -49,17 +51,25 @@ local function new_metadata(request_context)
         tool_calls = request_context and request_context.tool_calls or {},
         web_search_attempts = 0,
         web_search_queries = {},
+        inference_model = nil,
     }
 end
 
 
-OllamaClient.config = {
-    model = "gemma4:26b",
-    endpoint = "http://127.0.0.1:11434/api/generate",
-    chat_endpoint = "http://127.0.0.1:11434/api/chat",
-    timeout = 120,
-    max_tool_rounds = 4,
+LLMClient.config = {
+    backend = {
+        host = "127.0.0.1",
+        port = 50006,
+        path = "/v1/chat/completions",
+        timeout = nil,
+        debug_requests = false,
+    },
+    max_tool_rounds = 8,
 }
+
+LLMClient.interface = LlamaInterface.new({
+    backend = LlamaCpp.new(LLMClient.config.backend),
+})
 
 local ToolHandlers = {
     memory_store = function(arguments, callback)
@@ -162,239 +172,6 @@ local function build_context(history)
     end
 
     return context
-end
-
-
-local function parse_endpoint(endpoint)
-    local host, port, path
-
-    host, port, path =
-        endpoint:match(
-            "^http://([^:/]+):(%d+)(/.*)$"
-        )
-
-    if host and port and path then
-        return host, tonumber(port), path
-    end
-
-    host, path =
-        endpoint:match(
-            "^http://([^/]+)(/.*)$"
-        )
-
-    if host and path then
-        return host, 80, path
-    end
-
-    host =
-        endpoint:match(
-            "^http://([^/:]+)$"
-        )
-
-    if host then
-        return host, 80, "/"
-    end
-
-    return nil, nil, nil
-end
-
-
-local function decode_response(response_text)
-    local decoded, _, decode_error =
-        json.decode(
-            response_text,
-            1,
-            nil
-        )
-
-    if not decoded then
-        return nil,
-            "Unable to decode Ollama response: "
-                .. tostring(decode_error)
-    end
-
-    if decoded.error then
-        return nil,
-            "Ollama error: "
-                .. tostring(decoded.error)
-    end
-
-    if not decoded.message then
-        return nil,
-            "Ollama response did not contain a message"
-    end
-
-    return decoded, nil
-end
-
-
-local function make_request(
-    url,
-    payload,
-    callback
-)
-    local host, port, path =
-        parse_endpoint(url)
-
-    if not host then
-        callback(
-            nil,
-            "Invalid Ollama endpoint: "
-                .. tostring(url)
-        )
-        return
-    end
-
-    local completed = false
-    local response_data = {}
-
-    local function finish(
-        response,
-        err,
-        metadata
-    )
-        if completed then
-            return
-        end
-
-        completed = true
-        callback(response, err, metadata or {})
-    end
-
-    local request_options = {
-        host = host,
-        port = port,
-        path = path,
-        method = "POST",
-
-        headers = {
-            ["Content-Type"] =
-                "application/json",
-
-            ["Content-Length"] =
-                tostring(#payload),
-
-            ["Connection"] =
-                "close",
-        },
-    }
-
-    local ok, req_or_error =
-        pcall(function()
-
-            return http.request(
-                request_options,
-                function(res)
-
-                    local status_code =
-                        tonumber(
-                            res.statusCode or 0
-                        )
-
-                    res:on(
-                        "data",
-                        function(chunk)
-                            response_data[
-                                #response_data + 1
-                            ] = chunk
-                        end
-                    )
-
-                    res:on(
-                        "end",
-                        function()
-
-                            local body =
-                                table.concat(
-                                    response_data
-                                )
-
-                            if status_code < 200 or
-                               status_code >= 300 then
-
-                                finish(
-                                    nil,
-                                    string.format(
-                                        "Ollama HTTP %d: %s",
-                                        status_code,
-                                        body
-                                    ),
-                                    {
-                                        status_code = status_code,
-                                        response_bytes = #body,
-                                    }
-                                )
-
-                                return
-                            end
-
-                            if body == "" then
-                                finish(
-                                    nil,
-                                    "Ollama returned an empty response",
-                                    {
-                                        status_code = status_code,
-                                        response_bytes = 0,
-                                    }
-                                )
-                                return
-                            end
-
-                            finish(
-                                body,
-                                nil,
-                                {
-                                    status_code = status_code,
-                                    response_bytes = #body,
-                                }
-                            )
-                        end
-                    )
-                end
-            )
-        end)
-
-    if not ok then
-        finish(
-            nil,
-            "Unable to create Ollama HTTP request: "
-                .. tostring(req_or_error)
-        )
-        return
-    end
-
-    local req = req_or_error
-
-    req:on(
-        "error",
-        function(err)
-
-            finish(
-                nil,
-                "Ollama request error: "
-                    .. tostring(err)
-            )
-        end
-    )
-
-    req:setTimeout(
-        OllamaClient.config.timeout * 1000,
-        function()
-
-            finish(
-                nil,
-                "Ollama request timed out after "
-                    .. tostring(
-                        OllamaClient.config.timeout
-                    )
-                    .. " seconds"
-            )
-
-            req:destroy()
-        end
-    )
-
-    req:done(payload)
 end
 
 
@@ -650,7 +427,7 @@ local function serialize_tool_result(result)
         .. tostring(encode_error)
 end
 
-OllamaClient._serialize_tool_result = serialize_tool_result
+LLMClient._serialize_tool_result = serialize_tool_result
 
 
 local function make_tool_result_message(
@@ -870,59 +647,45 @@ local function call_round(
         round = round,
     })
 
-    local payload = {
-        model =
-            OllamaClient.config.model,
-
-        messages = messages,
-
-        stream = false,
+    local options = {
+        tool_choice = "auto",
     }
 
     if tools and #tools > 0 then
-        payload.tools = tools
+        options.tools = tools
     end
 
-    local json_payload,
-        encode_error =
-        json.encode(payload)
-
-    if not json_payload then
-        callback(
-            nil,
-            "Unable to encode Ollama request: "
-                .. tostring(encode_error)
-        )
-        return
+    if request_context and request_context.inference_timeout ~= nil then
+        options.timeout = request_context.inference_timeout
     end
 
     print(
         string.format(
-            "[Ollama tool round %d]",
+            "[LLM tool round %d]",
             round
         )
     )
 
-    print("[Ollama request payload]")
-    print(json_payload)
-    print("[End Ollama request payload]")
-
-    make_request(
-        OllamaClient.config.chat_endpoint,
-        json_payload,
+    local cancel_inference = LLMClient.interface:chat(
+        messages,
+        options,
         function(
-            response_text,
+            assistant_message,
             request_error,
-            transport_metadata
+            inference_metadata
         )
+            if request_context then
+                request_context.cancel_inference = nil
+            end
 
             if request_error then
                 Observability.log("model_response_received", request_context, {
                     round = round,
                     outcome = "error",
-                    http_status = transport_metadata and transport_metadata.status_code or nil,
-                    response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
+                    http_status = inference_metadata and inference_metadata.status_code or nil,
+                    response_bytes = inference_metadata and inference_metadata.response_bytes or 0,
                 })
+
                 callback(
                     nil,
                     request_error,
@@ -931,79 +694,78 @@ local function call_round(
                 return
             end
 
-            local decoded,
-                response_error =
-                decode_response(
-                    response_text
-                )
-
-            if not decoded then
+            if type(assistant_message) ~= "table" then
                 callback(
                     nil,
-                    response_error,
+                    "Inference backend returned an invalid assistant message",
                     metadata
                 )
                 return
             end
 
-            local assistant_message =
-                decoded.message
-
-            -- Keep terminal visibility consistent for ordinary
-            -- conversational rounds as well as tool-call rounds.
-            -- Ollama may provide model reasoning separately from
-            -- the user-facing message content.
             local thinking =
-                assistant_message.thinking or decoded.thinking or ""
+                assistant_message.reasoning_content
+                or assistant_message.thinking
+                or ""
 
             if thinking ~= "" then
-                print("[Ollama model thinking]")
+                print("[LLM model thinking]")
                 print(thinking)
-                print("[End Ollama model thinking]")
+                print("[End LLM model thinking]")
             end
 
-            local content = assistant_message.content or ""
+            local content =
+                assistant_message.content
+                or ""
 
-            print("[Ollama response]")
+            print("[LLM response]")
             print(content)
-            print("[End Ollama response]")
+            print("[End LLM response]")
+
             local tool_calls = get_tool_calls(assistant_message)
+            local finish_reason =
+                inference_metadata
+                and inference_metadata.finish_reason
+                or nil
 
-            local done_reason = decoded.done_reason
-            local prompt_eval_count = decoded.prompt_eval_count
-            local eval_count = decoded.eval_count
-            local total_tokens = nil
+            local prompt_tokens =
+                inference_metadata
+                and inference_metadata.prompt_tokens
+                or nil
 
-            if type(prompt_eval_count) == "number"
-               and type(eval_count) == "number" then
-                total_tokens = prompt_eval_count + eval_count
-            end
+            local completion_tokens =
+                inference_metadata
+                and inference_metadata.completion_tokens
+                or nil
+
+            local total_tokens =
+                inference_metadata
+                and inference_metadata.total_tokens
+                or nil
 
             local context_exhausted =
-                done_reason == "length"
+                finish_reason == "length"
+
+            if inference_metadata and inference_metadata.model then
+                metadata.inference_model = inference_metadata.model
+            end
 
             Observability.log("model_response_received", request_context, {
                 round = round,
                 outcome = "success",
-                http_status = transport_metadata and transport_metadata.status_code or nil,
-                response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
+                http_status = inference_metadata and inference_metadata.status_code or nil,
+                response_bytes = inference_metadata and inference_metadata.response_bytes or 0,
                 content_bytes = #content,
                 tool_call_count = #tool_calls,
-                done = decoded.done,
-                done_reason = done_reason,
-                prompt_eval_count = prompt_eval_count,
-                eval_count = eval_count,
+                finish_reason = finish_reason,
+                prompt_tokens = prompt_tokens,
+                completion_tokens = completion_tokens,
                 total_tokens = total_tokens,
-                total_duration_ns = decoded.total_duration,
-                load_duration_ns = decoded.load_duration,
-                prompt_eval_duration_ns = decoded.prompt_eval_duration,
-                eval_duration_ns = decoded.eval_duration,
                 context_exhausted = context_exhausted,
+                inference_model = inference_metadata and inference_metadata.model or nil,
             })
 
-            -- Normal final answer.
             if #tool_calls == 0 then
-
                 Observability.log("model_decision", request_context, {
                     round = round,
                     decision = "no_tool",
@@ -1012,12 +774,11 @@ local function call_round(
                 if content == "" then
                     Observability.log("model_empty_response", request_context, {
                         round = round,
-                        http_status = transport_metadata and transport_metadata.status_code or nil,
-                        response_bytes = transport_metadata and transport_metadata.response_bytes or 0,
-                        done = decoded.done,
-                        done_reason = done_reason,
-                        prompt_eval_count = prompt_eval_count,
-                        eval_count = eval_count,
+                        http_status = inference_metadata and inference_metadata.status_code or nil,
+                        response_bytes = inference_metadata and inference_metadata.response_bytes or 0,
+                        finish_reason = finish_reason,
+                        prompt_tokens = prompt_tokens,
+                        completion_tokens = completion_tokens,
                         total_tokens = total_tokens,
                         context_exhausted = context_exhausted,
                     })
@@ -1045,22 +806,16 @@ local function call_round(
                 tool_call_count = #tool_calls,
             })
 
-            -- Preserve Ollama's assistant
-            -- tool-call message.
             table.insert(
                 messages,
                 assistant_message
             )
 
-            -- Execute each tool asynchronously,
-            -- then continue with another Ollama
-            -- round.
             execute_tool_calls(
                 tool_calls,
                 1,
                 messages,
                 function(tool_error, tool_metadata)
-
                     if request_context and request_context.closed == true then
                         return
                     end
@@ -1075,7 +830,7 @@ local function call_round(
                     end
 
                     if round >=
-                        (OllamaClient.config.max_tool_rounds
+                        (LLMClient.config.max_tool_rounds
                          or 4) then
 
                         callback(
@@ -1084,6 +839,7 @@ local function call_round(
                             {
                                 max_tool_rounds_exceeded = true,
                                 tool_round = round,
+                                inference_model = metadata.inference_model,
                                 web_evidence_used = metadata.web_evidence_used,
                                 web_urls = metadata.web_urls,
                                 evidence_events = metadata.evidence_events,
@@ -1109,10 +865,14 @@ local function call_round(
             )
         end
     )
+
+    if request_context then
+        request_context.cancel_inference = cancel_inference
+    end
 end
 
 
-function OllamaClient.call(
+function LLMClient.call(
     system_prompt,
     conversation_history,
     tools,
@@ -1121,10 +881,18 @@ function OllamaClient.call(
 )
     if type(callback) ~= "function" then
         return nil,
-            "OllamaClient.call requires a callback"
+            "LLMClient.call requires a callback"
     end
 
     local metadata = new_metadata(request_context)
+
+    if request_context then
+        request_context.inference_timeout =
+            request_context.inference_timeout
+            or LLMClient.config.backend.timeout
+        active_requests[request_context.request_id] =
+            request_context
+    end
 
     local messages = {
         {
@@ -1147,41 +915,74 @@ function OllamaClient.call(
         )
     end
 
+    local completed = false
+
+    local function complete(response, err, result_metadata)
+        if completed then
+            return
+        end
+
+        completed = true
+
+        if request_context then
+            active_requests[request_context.request_id] = nil
+            request_context.cancel_inference = nil
+            request_context.complete = nil
+        end
+
+        callback(response, err, result_metadata)
+    end
+
+    if request_context then
+        request_context.complete = complete
+    end
+
     call_round(
         system_prompt,
         messages,
         tools,
         1,
-        callback,
+        complete,
         metadata,
         request_context
     )
 end
 
 
-function OllamaClient.set_model(
-    model_name
-)
-    OllamaClient.config.model =
-        model_name
+function LLMClient.cancel(request_id)
+    local context = active_requests[request_id]
+
+    if not context then
+        return false, "No active request"
+    end
+
+    context.closed = true
+
+    local cancel_inference =
+        context.cancel_inference
+
+    if type(context.complete) == "function" then
+        context.complete(
+            nil,
+            "llama.cpp request cancelled",
+            {
+                cancelled = true,
+                request_id = request_id,
+            }
+        )
+    end
+
+    if type(cancel_inference) == "function" then
+        cancel_inference()
+    end
 
     return true
 end
 
 
-function OllamaClient.set_chat_endpoint(
-    endpoint_url
-)
-    OllamaClient.config.chat_endpoint =
-        endpoint_url
-
-    return true
+function LLMClient.get_config()
+    return LLMClient.config
 end
 
 
-function OllamaClient.get_config()
-    return OllamaClient.config
-end
-
-
-return OllamaClient
+return LLMClient

@@ -1,0 +1,255 @@
+-- llama.cpp HTTP backend for lua-llama-interface.
+-- Targets the OpenAI-compatible chat completion endpoint exposed by
+-- llama.cpp's server.
+
+local http = require("http")
+local https = require("https")
+local json = require("./lunajson/lunajson")
+
+local LlamaCpp = {}
+LlamaCpp.__index = LlamaCpp
+
+local function trim(value)
+    return tostring(value or ""):match("^%s*(.-)%s*$") or ""
+end
+
+function LlamaCpp.new(options)
+    options = options or {}
+
+    return setmetatable({
+        host = options.host or "127.0.0.1",
+        port = options.port or 50006,
+        path = options.path or "/v1/chat/completions",
+        model = options.model,
+        scheme = options.scheme or "http",
+        timeout = options.timeout,
+        user_agent = options.user_agent or "lua-llama-interface/0.1",
+        debug_requests = options.debug_requests or false,
+    }, LlamaCpp)
+end
+
+function LlamaCpp:_request(method, path, body, callback, request_timeout)
+    local chunks = {}
+    local completed = false
+
+    local function finish(result, err, metadata)
+        if completed then
+            return
+        end
+        completed = true
+        callback(result, err, metadata)
+    end
+
+    local encoded_body = body and json.encode(body) or nil
+
+    if self.debug_requests and encoded_body then
+        print("[LLAMA REQUEST BODY]")
+        print(encoded_body)
+        print("[END LLAMA REQUEST BODY]")
+    end
+    local headers = {
+        ["User-Agent"] = self.user_agent,
+        ["Accept"] = "application/json",
+        ["Connection"] = "close",
+    }
+
+    if encoded_body then
+        headers["Content-Type"] = "application/json"
+        headers["Content-Length"] = tostring(#encoded_body)
+    end
+
+    local transport = self.scheme == "https" and https or http
+
+    local request_options = {
+        host = self.host,
+        port = self.port,
+        path = path,
+        method = method,
+        headers = headers,
+    }
+
+    if self.scheme == "https" then
+        request_options.secureProtocol = "TLS_client"
+        request_options.hostname = self.host
+    end
+
+    local ok, req_or_error = pcall(function()
+        return transport.request(request_options, function(res)
+            local status = tonumber(res.statusCode or res.code or 0)
+
+            res:on("data", function(chunk)
+                chunks[#chunks + 1] = chunk
+            end)
+
+            res:on("end", function()
+                local response_body = table.concat(chunks)
+                local metadata = {
+                    status_code = status,
+                    response_bytes = #response_body,
+                }
+
+                if status < 200 or status >= 300 then
+                    finish(nil, string.format(
+                        "llama.cpp HTTP %d: %s",
+                        status,
+                        trim(response_body):sub(1, 1000)
+                    ), metadata)
+                    return
+                end
+
+                if response_body == "" then
+                    finish(nil, "llama.cpp returned an empty response", metadata)
+                    return
+                end
+
+                local decoded_ok, decoded = pcall(json.decode, response_body)
+                if not decoded_ok then
+                    finish(nil,
+                        "Unable to decode llama.cpp JSON response: "
+                            .. tostring(decoded),
+                        metadata)
+                    return
+                end
+
+                finish(decoded, nil, metadata)
+            end)
+
+            res:on("error", function(err)
+                finish(nil, "llama.cpp response error: " .. tostring(err), {
+                    status_code = status,
+                })
+            end)
+        end)
+    end)
+
+    if not ok then
+        finish(nil,
+            "Unable to create llama.cpp request: "
+                .. tostring(req_or_error))
+        return
+    end
+
+    req_or_error:on("error", function(err)
+        finish(nil, "llama.cpp request error: " .. tostring(err))
+    end)
+
+    local timeout = request_timeout
+    if timeout == nil then
+        timeout = self.timeout
+    end
+
+    if timeout and tonumber(timeout) and tonumber(timeout) > 0 then
+        req_or_error:setTimeout(
+            tonumber(timeout) * 1000,
+            function()
+                finish(
+                    nil,
+                    "llama.cpp request timed out after "
+                        .. tostring(timeout)
+                        .. " seconds"
+                )
+                req_or_error:destroy()
+            end
+        )
+    end
+
+    local cancelled = false
+
+    local function cancel()
+        if cancelled or completed then
+            return
+        end
+
+        cancelled = true
+
+        finish(
+            nil,
+            "llama.cpp request cancelled"
+        )
+
+        req_or_error:destroy()
+    end
+
+    if encoded_body then
+        req_or_error:write(encoded_body)
+    end
+
+    req_or_error:done()
+
+    return cancel
+end
+
+function LlamaCpp:status(callback)
+    self:_request("GET", "/health", nil, function(result, err, metadata)
+        if err then
+            callback(nil, err, metadata)
+            return
+        end
+
+        callback({
+            ready = true,
+            response = result,
+        }, nil, metadata)
+    end)
+end
+
+function LlamaCpp:chat(messages, options, callback)
+    options = options or {}
+
+    local body = {
+        messages = messages,
+        stream = false,
+    }
+
+    if self.model then
+        body.model = self.model
+    end
+
+    local passthrough = {
+        temperature = true,
+        top_p = true,
+        top_k = true,
+        max_tokens = true,
+        seed = true,
+        stop = true,
+        response_format = true,
+        tools = true,
+        tool_choice = true,
+        parallel_tool_calls = true,
+        chat_template_kwargs = true,
+        reasoning_format = true,
+    }
+
+    for key in pairs(passthrough) do
+        if options[key] ~= nil then
+            body[key] = options[key]
+        end
+    end
+
+    return self:_request("POST", self.path, body, function(result, err, metadata)
+        if err then
+            callback(nil, err, metadata)
+            return
+        end
+
+        local choice = result.choices and result.choices[1]
+        if not choice or not choice.message then
+            callback(nil,
+                "llama.cpp response did not contain a chat message",
+                metadata)
+            return
+        end
+
+        local usage = result.usage or {}
+        metadata = metadata or {}
+        metadata.model = result.model
+        metadata.finish_reason = choice.finish_reason
+        metadata.prompt_tokens = usage.prompt_tokens
+        metadata.completion_tokens = usage.completion_tokens
+        metadata.total_tokens = usage.total_tokens
+
+        callback(choice.message, nil, metadata)
+    end, options.timeout)
+end
+
+return LlamaCpp
