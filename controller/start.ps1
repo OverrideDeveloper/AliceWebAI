@@ -126,7 +126,7 @@ function Get-ServiceHealth {
             "evidence" {
                 $response = Invoke-RestMethod -Uri $Service.HealthUri -TimeoutSec 2
                 if ($response.prepared -eq $true) { return "READY" }
-                return "RESPONDING"
+                return "PREPARING"
             }
             "alice" {
                 $response = Invoke-WebRequest -Uri $Service.HealthUri -TimeoutSec 2 -UseBasicParsing
