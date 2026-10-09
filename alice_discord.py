@@ -72,7 +72,7 @@ ALICE_STATUS_ENDPOINT = (
 )
 
 ALICE_TIMEOUT = float(
-    os.getenv("ALICE_TIMEOUT", "135")
+    os.getenv("ALICE_TIMEOUT", "300")
 )
 
 DISCORD_GUILD_ID = os.getenv(
