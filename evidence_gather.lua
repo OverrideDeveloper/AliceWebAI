@@ -166,7 +166,8 @@ M.definition = {
             .. "local data record. Use this after EvidenceHunt identifies "
             .. "a relevant record. The index identifies the record and "
             .. "term_find selects the structural evidence to return. The corpus "
-            .. "must match the corpus used by EvidenceHunt.",
+            .. "must match the corpus used by EvidenceHunt. If the active "
+            .. "corpus name is unknown, call EvidenceCorpus to discover it.",
         parameters = {
             type = "object",
             properties = {
