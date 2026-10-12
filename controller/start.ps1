@@ -13,6 +13,12 @@ $CorpusRoot = Join-Path $Root "corpus"
 $BinRoot = Join-Path $Root "bin"
 $LogRoot = Join-Path $Root "logs"
 
+# All runtime services bind to loopback; keep these aligned with each service configuration.
+$MemoryHost = "127.0.0.1"
+$EvidenceHost = "127.0.0.1"
+$InferenceHost = "127.0.0.1"
+$AliceHost = "127.0.0.1"
+
 $MemoryPort = 8090
 $EvidencePort = 60005
 $InferencePort = 50006
