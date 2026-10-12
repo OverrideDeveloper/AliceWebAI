@@ -107,8 +107,14 @@ function Start-ManagedProcess {
     $stderr = Join-Path $LogRoot ("{0}-{1}.stderr.log" -f $Name, $RunId)
     Write-Status "STARTING" ("{0}: {1}" -f $Name, $FilePath) Cyan
     Write-Status "COMMAND" $Arguments DarkGray
-
-    $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $Root -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden -PassThru
+    
+    # handle that luvit does not run if standardoutput and error is redirected, keep this terminal visible
+    if ($Arguments -like "*web_server.lua*") {
+        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $Root -PassThru
+    } else {
+        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    }
+    
 
     $entry = [pscustomobject]@{
         Name = $Name
