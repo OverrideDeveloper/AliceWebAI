@@ -106,6 +106,7 @@ function Start-ManagedProcess {
     $stdout = Join-Path $LogRoot ("{0}-{1}.stdout.log" -f $Name, $RunId)
     $stderr = Join-Path $LogRoot ("{0}-{1}.stderr.log" -f $Name, $RunId)
     Write-Status "STARTING" ("{0}: {1}" -f $Name, $FilePath) Cyan
+    Write-Status "COMMAND" $Arguments DarkGray
 
     $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $Root -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden -PassThru
 
@@ -423,7 +424,10 @@ try {
                     $service.Status = "FAILED"
                     $exitCode = "unknown"
                     try {
-                        $exitCode = $service.Process.ExitCode
+                        $reportedExitCode = $service.Process.ExitCode
+                        if ($null -ne $reportedExitCode) {
+                            $exitCode = $reportedExitCode
+                        }
                     }
                     catch {
                         # Keep the failure report useful if the exit code is unavailable.
