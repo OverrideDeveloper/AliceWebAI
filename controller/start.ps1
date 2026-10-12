@@ -55,6 +55,9 @@ function Get-ApplicationPath {
 
 function Quote-ProcessArgument {
     param([string]$Value)
+
+    # PowerShell single-quoted strings treat backslashes literally. Use actual
+    # double-quote characters so Start-Process receives valid Windows arguments.
     return '"' + $Value.Replace('"', '\"') + '"'
 }
 
@@ -82,7 +85,13 @@ function Show-ProcessLogTail {
     foreach ($path in @($ManagedProcess.Stdout, $ManagedProcess.Stderr)) {
         if (Test-Path -LiteralPath $path) {
             Write-Host ("--- Last lines: {0} ---" -f $path) -ForegroundColor DarkYellow
-            Get-Content -LiteralPath $path -Tail 20
+            $logFile = Get-Item -LiteralPath $path
+            if ($logFile.Length -eq 0) {
+                Write-Host "(empty)"
+            }
+            else {
+                Get-Content -LiteralPath $path -Tail 20
+            }
         }
     }
 }
@@ -103,6 +112,7 @@ function Start-ManagedProcess {
     $entry = [pscustomobject]@{
         Name = $Name
         Process = $process
+        Arguments = $Arguments
         Stdout = $stdout
         Stderr = $stderr
         Status = "STARTING"
@@ -411,7 +421,18 @@ try {
             if ($service.Process.HasExited) {
                 if ($service.Status -ne "FAILED") {
                     $service.Status = "FAILED"
-                    Write-Status "FAILED" ("{0} exited with code {1}." -f $service.Name, $service.Process.ExitCode) Red
+                    $exitCode = "unknown"
+                    try {
+                        $exitCode = $service.Process.ExitCode
+                    }
+                    catch {
+                        # Keep the failure report useful if the exit code is unavailable.
+                    }
+
+                    Write-Status "FAILED" ("{0} exited with code {1}." -f $service.Name, $exitCode) Red
+                    Write-Host ("Executable: {0}" -f $service.Process.StartInfo.FileName) -ForegroundColor Yellow
+                    Write-Host ("Arguments: {0}" -f $service.Arguments) -ForegroundColor Yellow
+                    Write-Host ("Working directory: {0}" -f $Root) -ForegroundColor Yellow
                     Write-Host ("Logs: {0} | {1}" -f $service.Stdout, $service.Stderr) -ForegroundColor Yellow
                     Show-ProcessLogTail -ManagedProcess $service
                 }
