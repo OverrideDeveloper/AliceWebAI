@@ -1,6 +1,14 @@
 *.json
 *.tmp
+*.gguf
+*.xml
+*ggml*
+*llama*
+mtmd.dll
+libomp.dll
+LICENSE-LLVM-OpenMP
 .venv
 /memory
 __pycache__
 .luarocks
+/logs/
