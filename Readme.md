@@ -2,8 +2,6 @@
 
 AliceWebAI is a local, model-independent AI runtime. Alice's Lua middleware sits between the human-facing interface and the language model, coordinating conversation state, tool execution, behavioral policy, and execution provenance.
 
-Alice is named for Lewis Carroll's Alice, not for a particular technology.
-
 > Alice gives an LLM model an operating environment, with provenance as a first-class property of that environment.
 
 ## Why Alice Exists
@@ -90,8 +88,8 @@ The documented runtime workflow is for Windows and uses the controller.
 - Lua 5.1 and Luvit available on `PATH`
 - Python and ChromaDB (a project-local `.venv` is recommended)
 - llama.cpp's `llama-server.exe`
-- One compatible `.gguf` model in `model\\`
-- For local evidence, the Rust Data Engine executable, `dataset-stream-parser-api.exe`, and a supported corpus input in `corpus\\`
+- One compatible `.gguf` model in `model\`
+- For local evidence, the Rust Data Engine executable, `dataset-stream-parser-api.exe`, and a supported corpus input in `corpus\`
 
 No Ollama installation is required.
 
@@ -114,9 +112,9 @@ No Ollama installation is required.
    .\.venv\Scripts\python.exe -m pip install chromadb
    ```
 
-4. Put `llama-server.exe` in `bin\\` or make it available on `PATH`. Put exactly one compatible GGUF model in `model\\`.
+4. Put `llama-server.exe` in `bin\` or make it available on `PATH`. Put exactly one compatible GGUF model in `model\`.
 
-5. To enable local evidence, build `dataset-stream-parser-api.exe` from the companion repository and place it in `bin\\`. Put an XML/XML.BZ2 corpus file or a subdirectory of text files in `corpus\\`. The controller can also run without local evidence.
+5. To enable local evidence, build `dataset-stream-parser-api.exe` from the companion repository and place it in `bin\`. Put an XML/XML.BZ2 corpus file or a subdirectory of text files in `corpus\`. The controller can also run without local evidence.
 
 6. From the repository root, start Alice:
 
@@ -124,7 +122,7 @@ No Ollama installation is required.
    .\controller\start.ps1
    ```
 
-The controller checks prerequisites and port conflicts, selects the model and optional corpus, starts the services, and reports readiness. It keeps the Alice web-server console visible separately from the controller's own output. Logs for redirected service output are written under `logs\\`.
+The controller checks prerequisites and port conflicts, selects the model and optional corpus, starts the services, and reports readiness. It keeps the Alice web-server console visible separately from the controller's own output. Logs for redirected service output are written under `logs\`.
 
 Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) when Alice reports ready.
 
@@ -181,7 +179,7 @@ The design goal is traceable provenance across discovery, retrieval, execution, 
 
 ## Web search behavior
 
-The current provider pool is DuckDuckGo HTML with Mojeek HTML fallback.
+The current provider pool is DuckDuckGo HTML with capacity for more to be added.
 
 - An access challenge, HTTP failure, timeout, or unusable response is a provider failure—not a successful search with zero results.
 - A successful search with no matching results is a valid empty result.
