@@ -397,7 +397,7 @@ local function serialize_tool_result(result)
     -- compacted before being sent to the model. Local evidence results
     -- also contain a "results" array, but their records are authoritative
     -- evidence and must not be projected through the web-search schema.
-    if result.results and result.corpus == nil then
+    if result.query ~= nil and result.results and result.corpus == nil then
         local compact = {
             query = result.query,
             results = {},
