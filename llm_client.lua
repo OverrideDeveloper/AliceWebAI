@@ -36,6 +36,7 @@ local WebSearch = require("./web_search")
 local EvidenceHunt = require("./evidence_hunt")
 local EvidenceGather = require("./evidence_gather")
 local EvidenceCorpus = require("./evidence_corpus")
+local TaskManager = require("./task_manager")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -294,6 +295,7 @@ local function execute_tool(
         EvidenceHunt = true,
         EvidenceGather = true,
         EvidenceCorpus = true,
+        task_manager = true,
     }
 
     if asynchronous_tools[tool_name] then
@@ -361,6 +363,34 @@ local function execute_tool(
     callback(
         result,
         nil
+    )
+end
+
+
+-- Register TaskManager only after execute_tool exists, so batch steps use
+-- the same validation, error handling, logging, and handlers as normal calls.
+ToolHandlers.task_manager = function(arguments, callback)
+    TaskManager.run(
+        arguments,
+        callback,
+        function(name, tool_arguments, done)
+            local encoded, encode_error = json.encode(tool_arguments)
+            if not encoded then
+                done(nil, {
+                    category = "request_encoding_error",
+                    message = "Unable to encode arguments for "
+                        .. tostring(name) .. ": " .. tostring(encode_error),
+                })
+                return
+            end
+
+            execute_tool({
+                ["function"] = {
+                    name = name,
+                    arguments = encoded,
+                },
+            }, done)
+        end
     )
 end
 
