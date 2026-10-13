@@ -174,8 +174,10 @@ M.definition = {
             .. "bounded evidence from the matches. Use this to discover "
             .. "which authoritative records may answer the current request. "
             .. "Each result includes an index that can be passed to "
-            .. "EvidenceGather for more focused evidence. The corpus must "
-            .. "be named explicitly.",
+            .. "EvidenceGather for more focused evidence. If the active "
+            .. "corpus name is unknown, call EvidenceCorpus first and pass "
+            .. "its returned corpus value unchanged. The corpus must be "
+            .. "named explicitly.",
         parameters = {
             type = "object",
             properties = {

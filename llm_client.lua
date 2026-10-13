@@ -35,6 +35,7 @@ local DiceRoll = require("./dice_roll")
 local WebSearch = require("./web_search")
 local EvidenceHunt = require("./evidence_hunt")
 local EvidenceGather = require("./evidence_gather")
+local EvidenceCorpus = require("./evidence_corpus")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -88,6 +89,9 @@ local ToolHandlers = {
     end,
     EvidenceGather = function(arguments, callback)
         EvidenceGather.gather(arguments, callback)
+    end,
+    EvidenceCorpus = function(arguments, callback)
+        EvidenceCorpus.discover(arguments, callback)
     end,
 }
 
@@ -289,6 +293,7 @@ local function execute_tool(
         web_search = true,
         EvidenceHunt = true,
         EvidenceGather = true,
+        EvidenceCorpus = true,
     }
 
     if asynchronous_tools[tool_name] then

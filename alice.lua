@@ -37,6 +37,7 @@ local ResponsePolicy = require("./response_policy")
 local WebSearch = require("./web_search")
 local EvidenceHunt = require("./evidence_hunt")
 local EvidenceGather = require("./evidence_gather")
+local EvidenceCorpus = require("./evidence_corpus")
 
 local available_tools = {
 MemorySearch.definition,
@@ -45,7 +46,8 @@ CurrentTime.definition,
 DiceRoll.definition,
 WebSearch.definition,
 EvidenceHunt.definition,
-EvidenceGather.definition
+EvidenceGather.definition,
+EvidenceCorpus.definition
 }
 
 local Alice = {}
