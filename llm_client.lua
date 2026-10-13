@@ -37,6 +37,8 @@ local EvidenceHunt = require("./evidence_hunt")
 local EvidenceGather = require("./evidence_gather")
 local EvidenceCorpus = require("./evidence_corpus")
 local TaskManager = require("./task_manager")
+local HNTopNews = require("./hn_top_news")
+local LocalWeather = require("./local_weather")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -93,6 +95,12 @@ local ToolHandlers = {
     end,
     EvidenceCorpus = function(arguments, callback)
         EvidenceCorpus.discover(arguments, callback)
+    end,
+    hn_top_news = function(arguments, callback)
+        HNTopNews.get(arguments, callback)
+    end,
+    local_weather = function(arguments, callback)
+        LocalWeather.get(arguments, callback)
     end,
 }
 
@@ -296,6 +304,8 @@ local function execute_tool(
         EvidenceHunt = true,
         EvidenceGather = true,
         EvidenceCorpus = true,
+        hn_top_news = true,
+        local_weather = true,
         task_manager = true,
     }
 

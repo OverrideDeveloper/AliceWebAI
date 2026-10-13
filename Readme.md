@@ -66,6 +66,8 @@ AliceWebAI/
 ├── memory_search.lua         # Memory search tool
 ├── evidence_corpus.lua       # Discover active evidence corpus
 ├── task_manager.lua          # Sequential batch tool orchestration
+├── hn_top_news.lua            # Hacker News top-story API tool
+├── local_weather.lua          # Open-Meteo current weather and forecast
 ├── evidence_hunt.lua         # Search for relevant records
 ├── evidence_gather.lua       # Retrieve bounded evidence
 ├── web_search.lua            # Web-search provider boundary
@@ -150,6 +152,10 @@ The available tools include:
 - `EvidenceHunt` — search for records relevant to a term or query.
 - `EvidenceGather` — retrieve bounded evidence from selected records.
 - `task_manager` — execute up to eight existing tools sequentially and return each result or structured failure; later calls continue after a failure.
+- `hn_top_news` — retrieve up to five current top stories from the official Hacker News API, including article and discussion URLs.
+- `local_weather` — retrieve current conditions and a 1–7 day forecast from Open-Meteo for a named location, with Fahrenheit or Celsius temperatures.
+
+The daily-briefing tools use the asynchronous `lua-webcall-model` transport and Alice's `lunajson`-backed JSON adapter; they do not shell out to `curl`. Hacker News results retain article and discussion URLs, and weather results include the selected geocoded place and forecast units.
 
 The local evidence workflow separates finding a relevant record from retrieving its content. Alice discovers the configured corpus through the Rust API instead of assuming a corpus name. Evidence returned to the model is bounded.
 
@@ -199,6 +205,7 @@ tests/request_boundary.lua
 tests/response_policy.lua
 tests/web_search.lua
 tests/task_manager.lua
+tests/digest_tools.lua
 ```
 
 ## Troubleshooting
