@@ -1,8 +1,10 @@
 # AliceWebAI
 
-AliceWebAI is a local web interface for Ollama-powered LLMs with a Lua/Luvit middleware layer providing behavioral overrides for common LLM behaviors and persistent semantic memory powered by ChromaDB.
+AliceWebAI is a local, model-independent AI runtime. Alice's Lua middleware sits between the human-facing interface and the language model, coordinating conversation state, tool execution, behavioral policy, and execution provenance.
 
-# Why Alice Exists
+> Alice gives an LLM model an operating environment, with provenance as a first-class property of that environment.
+
+## Why Alice Exists
 
 Alice began on September 4, 2026, after an AI model repeatedly denied receiving a prompt until presented with a screenshot.
 
@@ -16,373 +18,194 @@ And no, the name isn't a technology reference. It's a Lewis Carroll reference.
 
 ## Architecture
 
-AliceWebAI currently consists of several cooperating local components:
+The Windows runtime brings together these local components:
 
 ```text
 Browser
-   |
-   v
-Luvit Web Server :8080
-   |
-   v
-Alice / Lua Middleware
-   |
-   +--------------------+
-   |                    |
-   v                    v
-Ollama :11434       Memory Tools
-                        |
-                        v
-                 Python Memory Service :8090
-                        |
-                        v
-                     ChromaDB
+  |
+  v
+Luvit web_server.lua :8080
+  |
+  v
+Alice Lua middleware
+  |-----------------------|
+  |           |           |
+  v           v           v
+llm_client  Memory tools  Local evidence tools
+  |           |           |
+  v           v           v
+llama.cpp   Python        Rust Data Engine
+:50006      memory        :60005
+             service
+             :8090
+               |
+               v
+            ChromaDB
 ```
 
-Ollama handles the LLM inference and tool selection.
+- **Alice / Lua / Luvit** owns the browser interface, conversation lifecycle, tool orchestration, request boundaries, cancellation, and tool-execution provenance.
+- **llama.cpp** runs local model inference through its OpenAI-compatible chat-completions API. Alice uses the vendored `lua-llama-interface` boundary.
+- **The Python memory service** provides local HTTP access to ChromaDB. Semantic memory is separate from conversation history.
+- **The Rust Data Engine** prepares and searches a selected local corpus and returns bounded evidence.
+- **Web search** uses a provider boundary with DuckDuckGo HTML and Mojeek fallback. Provider failure is distinguished from a successful search with no results.
 
-The Lua/Luvit layer provides the web server, conversation handling, behavioral overrides, and tool orchestration.
+Services bind to loopback by default. This is a local runtime, not a claim that the application is hardened for exposure to an untrusted network.
 
-The Python memory service provides an HTTP bridge between Lua and ChromaDB.
-
-ChromaDB provides persistent semantic memory for Alice.
-
-Conversation history remains stored separately in `conversation_history.json`.
-
-## Setup
-
-### 1. Install Lua 5.1
-
-* Windows: Use Lua for Windows.
-* Linux: Install Lua 5.1 through `apt-get`.
-
-### 2. Install Luvit
-
-Install Luvit if it is not already present after the Lua installation.
-
-Verify:
+## Repository layout
 
 ```text
-luvit --version
+AliceWebAI/
+├── alice.lua                 # Alice runtime and tool orchestration
+├── llm_client.lua            # Inference and tool-call integration
+├── web_server.lua            # Browser interface server
+├── index.html                # Chat UI
+├── memory_service.py         # HTTP service for semantic memory
+├── chroma_memory.py          # ChromaDB storage operations
+├── memory_client.lua         # Lua-to-memory-service client
+├── memory_store.lua          # Memory storage tool
+├── memory_search.lua         # Memory search tool
+├── evidence_corpus.lua       # Discover active evidence corpus
+├── evidence_hunt.lua         # Search for relevant records
+├── evidence_gather.lua       # Retrieve bounded evidence
+├── web_search.lua            # Web-search provider boundary
+├── lua-llama-interface/      # Vendored inference interface/backend
+├── lua-webcall-model/        # Vendored HTTP transport abstraction
+├── lua-web-search/           # Vendored search implementation
+├── controller/start.ps1      # Windows runtime controller
+├── model/                    # Local GGUF model
+├── corpus/                   # Local corpus inputs
+├── bin/                      # Runtime executables
+└── logs/                     # Controller logs
 ```
 
-### 3. Install the required Lua modules
+Model files and corpus datasets are local assets and should not be committed to the repository.
 
-Using LuaRocks:
+## Requirements
 
-PowerShell:
+The documented runtime workflow is for Windows and uses the controller.
 
-```powershell
-luarocks install luasocket
-luarocks install dkjson
-```
+- PowerShell
+- Lua 5.1 and Luvit available on `PATH`
+- Python and ChromaDB (a project-local `.venv` is recommended)
+- llama.cpp's `llama-server.exe`
+- One compatible `.gguf` model in `model\`
+- For local evidence, the Rust Data Engine executable, `dataset-stream-parser-api.exe`, and a supported corpus input in `corpus\`
 
-Linux:
+No Ollama installation is required.
 
-```bash
-luarocks install luasocket
-luarocks install dkjson
-```
+## Setup and startup
 
-### 4. Install Python
+1. Clone the repository and enter its directory:
 
-Alice's persistent semantic memory service requires Python.
+   ```powershell
+   git clone https://github.com/OverrideDeveloper/AliceWebAI.git
+   Set-Location AliceWebAI
+   ```
 
-Verify that Python is available:
+2. Install Lua 5.1, Luvit, Python, and llama.cpp. Make `lua` and `luvit` available on `PATH`.
 
-PowerShell:
+3. Create the Python environment and install ChromaDB:
 
-```powershell
-python --version
-```
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\python.exe -m pip install --upgrade pip
+   .\.venv\Scripts\python.exe -m pip install chromadb
+   ```
 
-Linux:
+4. Put `llama-server.exe` in `bin\` or make it available on `PATH`. Put exactly one compatible GGUF model in `model\`.
 
-```bash
-python3 --version
-```
+5. To enable local evidence, build `dataset-stream-parser-api.exe` from the companion repository and place it in `bin\`. Put an XML/XML.BZ2 corpus file or a subdirectory of text files in `corpus\`. The controller can also run without local evidence.
 
-### 5. Clone this repository
+6. From the repository root, start Alice:
 
-Clone the AliceWebAI repository and change into the project directory.
+   ```powershell
+   .\controller\start.ps1
+   ```
 
-### 6. Create the Python virtual environment
+The controller checks prerequisites and port conflicts, selects the model and optional corpus, starts the services, and reports readiness. It keeps the Alice web-server console visible separately from the controller's own output. Logs for redirected service output are written under `logs\`.
 
-PowerShell:
+Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) when Alice reports ready.
 
-```powershell
-python -m venv .venv
-```
+The controller selects one corpus per run. For multiple corpus candidates, it asks which one to load. Corpus preparation may take a while; the evidence API becomes ready when preparation finishes, independently of the other services.
 
-Activate it:
+### Local endpoints
 
-```powershell
-.venv\Scripts\Activate.ps1
-```
+| Service | Address |
+|---|---|
+| Alice web interface | `http://127.0.0.1:8080/` |
+| llama.cpp inference | `http://127.0.0.1:50006/` |
+| Memory service | `http://127.0.0.1:8090/memory/status` |
+| Rust Data Engine | `http://127.0.0.1:60005/local_data/status` |
 
-Linux:
+## Alice's tools and evidence
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+The available tools include:
 
-### 7. Install the Python memory dependencies
+- `current_time` — retrieve the current time.
+- `dice_roll` — roll dice, optionally returning individual rolls.
+- `memory_store` and `memory_search` — store and search semantic memories.
+- `web_search` — search the web through the configured provider boundary.
+- `EvidenceCorpus` — discover the active corpus identifier.
+- `EvidenceHunt` — search for records relevant to a term or query.
+- `EvidenceGather` — retrieve bounded evidence from selected records.
 
-With the virtual environment activated:
+The local evidence workflow separates finding a relevant record from retrieving its content. Alice discovers the configured corpus through the Rust API instead of assuming a corpus name. Evidence returned to the model is bounded.
 
-```powershell
-pip install chromadb
-```
+A model's tool-call request is not proof that a tool succeeded. Alice executes the tool and handles its result; failures remain distinguishable from successful empty results.
 
-Linux:
+## Conversation history and semantic memory
 
-```bash
-pip install chromadb
-```
+Conversation history is stored in `conversation_history.json`. ChromaDB-backed semantic memory is stored separately under `memory/chroma`.
 
-ChromaDB stores Alice's persistent semantic memory beneath the project's memory directory.
+- Conversation history preserves the conversational exchange.
+- Semantic memory stores selected information for later retrieval.
+- Lua memory tools communicate with the Python memory service through `memory_client.lua`.
 
-The first use of semantic memory may download the embedding model used by ChromaDB. This can take some time on the first run.
+ChromaDB may initialize or download embedding assets during the first memory operation.
 
-### 8. Install Ollama
+## Request boundaries and provenance
 
-Windows PowerShell:
+Each incoming human message starts a new request. Conversation history supplies context; it does not authorize Alice to resume old tool work.
 
-```powershell
-irm https://ollama.com/install.ps1 | iex
-```
+- Tool execution belongs to the current request.
+- A failed or tool-limited request is terminal once Alice reports the failure.
+- A retry or continuation must be established by the current message.
+- Request IDs and terminal request state help separate current execution from stale asynchronous work.
+- The Lua response layer can add a concise **Tools executed** section that distinguishes successful and failed calls.
 
-Follow the installation prompts, then install the Gemma model:
+Observability records request boundaries, model-round decisions, tool calls, and terminal outcomes. These are execution records, not model reasoning or chain-of-thought.
 
-```powershell
-ollama pull gemma4:26b
-```
+The design goal is traceable provenance across discovery, retrieval, execution, and presentation.
 
-Linux: Install Ollama using the installation instructions provided by Ollama, then install the model:
+## Web search behavior
 
-```bash
-ollama pull gemma4:26b
-```
+The current provider pool is DuckDuckGo HTML with capacity for more to be added.
 
-### 9. Start Ollama
+- An access challenge, HTTP failure, timeout, or unusable response is a provider failure—not a successful search with zero results.
+- A successful search with no matching results is a valid empty result.
+- Search attempts are bounded per request, and duplicate normalized queries are rejected.
+- Provider failure must not be treated as evidence that a subject does not exist.
 
-Open a PowerShell terminal in the AliceWebAI directory and start Ollama:
+## Tests
 
-```powershell
-ollama serve
-```
-
-Leave this terminal running.
-
-### 10. Start the Alice memory service
-
-Open another terminal in the AliceWebAI directory.
-
-Activate the Python virtual environment:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-Start the memory service:
-
-```powershell
-python memory_service.py
-```
-
-The service listens locally on:
+Regression tests cover request boundaries, response policy, and web-search behavior:
 
 ```text
-http://127.0.0.1:8090
-```
-
-Leave this terminal running.
-
-The memory service provides the HTTP bridge between Alice's Lua memory tools and ChromaDB.
-
-### 11. Start the Alice web server
-
-Open another terminal in the AliceWebAI directory and run:
-
-```powershell
-luvit web_server.lua
-```
-
-The web server listens locally on:
-
-```text
-http://127.0.0.1:8080
-```
-
-### 12. Open Alice
-
-Open your browser and go to:
-
-```text
-http://127.0.0.1:8080
-```
-
-Chat and interact with Alice with the added benefit of behavioral overrides available to **you**.
-
-Alice can also use her persistent semantic memory tools to store and retrieve information from ChromaDB.
-
-## Running Alice
-
-When running the complete system locally, the following processes should remain active:
-
-```text
-Terminal 1
-    ollama serve
-
-Terminal 2
-    python memory_service.py
-
-Terminal 3
-    luvit web_server.lua
-```
-
-The Python memory service and Luvit web server communicate locally over HTTP.
-
-Ollama should remain bound to:
-
-```text
-127.0.0.1:11434
-```
-
-The Alice memory service should remain bound to:
-
-```text
-127.0.0.1:8090
-```
-
-The Luvit web server should remain bound to:
-
-```text
-127.0.0.1:8080
-```
-
-Using `127.0.0.1` explicitly avoids relying on local hostname resolution when connecting between the Lua middleware and Ollama.
-
-## Request and Tool Boundaries
-
-Alice treats every incoming human message as a new request.
-
-Conversation history is context, not execution authorization. Tool use is request-scoped:
-
-* A tool used for a previous request is not automatically authorized for the next request.
-* A failed or tool-limited request is terminal once Alice reports the failure.
-* A conversational follow-up does not resume previous tool work.
-* An explicit retry or continuation in the current message establishes a new request and may authorize new tool use.
-* Tool failures are reported only within the request that produced them.
-* Request IDs and terminal request state provide an execution boundary around the asynchronous model/tool loop.
-
-The invariant is:
-
-`Tools belong to requests, not conversations.`
-
-Observability records the request boundary, model round decisions, tool calls, and terminal request outcome so stale tool execution can be distinguished from current-request behavior.
-
-Tool execution provenance is also carried with the completed request. When Alice executes one or more tools, the final human-facing reply includes a concise "Tools executed" section listing the tools and whether each execution succeeded or failed. This decoration happens in the Lua response layer rather than in a platform adapter, so the same provenance can be presented consistently to Discord, the web interface, and future clients. The structured tool-call metadata remains available to the application layer for future integrations such as the Rust data engine.
-
-## Web Search
-
-Alice's `web_search` capability is a provider boundary rather than a dependency on one search engine.
-
-The current provider pool is:
-
-* DuckDuckGo HTML
-* Mojeek HTML fallback
-
-A provider returning an access challenge, HTTP failure, timeout, or unusable response is treated as provider unavailability. It is **not** represented as a successful search with zero results.
-
-A genuine successful search with no matching results remains a valid empty result set.
-
-This distinction is intentional:
-
-```text
-HTTP response
-    |
-    +-- search results page ----> parse results
-    |
-    +-- access challenge -------> provider failure / fallback
-    |
-    +-- HTTP failure -----------> provider failure / fallback
-    |
-    +-- empty response ---------> provider failure / fallback
-```
-
-The web-search layer also records bounded diagnostics for the provider response, including HTTP status, content type, response size, and a bounded response preview. These diagnostics are intended for operator troubleshooting rather than normal human-facing chat.
-
-### Search-loop invariants
-
-Web search is bounded per model request:
-
-* At most three distinct web-search attempts are allowed.
-* Repeating the same normalized query is rejected as a duplicate attempt.
-* Provider fallback happens inside a single `web_search` operation.
-* The model must not interpret provider failure as evidence that the searched subject does not exist.
-
-### Failure language
-
-Internal error categories remain available to observability. Human-facing failures are translated into natural language rather than exposing implementation errors such as `Maximum tool-call rounds exceeded`.
-
-### Dice tool
-
-The `dice_roll` tool supports an optional `individual` argument. When true, the tool returns the individual rolls and their total. The default behavior remains returning only the total.
-
-### Regression tests
-
-Provider classification and parser behavior have regression coverage in:
-
-```text
-tests/web_search.lua
 tests/request_boundary.lua
 tests/response_policy.lua
+tests/web_search.lua
 ```
 
-The test fixture includes the DuckDuckGo access-challenge response that motivated the provider fallback work.
+## Troubleshooting
 
-## Semantic Memory
-
-Alice's long-term semantic memory is provided by ChromaDB.
-
-Two Lua tools currently provide access to the memory system:
-
-* `memory_store` stores information in Alice's persistent semantic memory.
-* `memory_search` performs semantic searches against stored memories.
-
-The Lua tools communicate with the Python memory service through `memory_client.lua`.
-
-The Python service manages the ChromaDB collection and persistent storage.
-
-Memory is separate from Alice's normal conversation history. Conversation history is stored in:
-
-```text
-conversation_history.json
-```
-
-while semantic memories are persisted through ChromaDB beneath:
-
-```text
-memory/chroma
-```
-
-The first semantic-memory operation may take longer than subsequent operations because ChromaDB may need to initialize or download its embedding model.
-
-## Behavioral Overrides
-
-Alice includes a middleware layer capable of detecting and applying behavioral overrides for common LLM behaviors.
-
-These overrides can be applied through Alice's existing command and web interfaces and are maintained separately from Alice's persistent semantic memory.
-
-The purpose is to give the human interacting with the model greater visibility and control over how the model responds.
+- **Alice does not open:** Check the controller output and confirm that the Alice service reports ready.
+- **A port is already in use:** Stop the existing service using that port, then start the controller again.
+- **Memory or inference fails to start:** Check the relevant service output under `logs\\` and confirm its dependencies and model are present.
+- **Evidence is not ready yet:** Large corpus preparation takes time. Check the evidence log for progress or errors.
 
 ## License
 
-AliceWebAI is licensed under the GNU General Public License v3.0.
-
-See `LICENSE.txt` for the complete license text.
+AliceWebAI is licensed under the GNU General Public License v3.0 or later. See `LICENSE.txt` for the license text.
 
 ## Author
 
