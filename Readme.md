@@ -65,6 +65,7 @@ AliceWebAI/
 ├── memory_store.lua          # Memory storage tool
 ├── memory_search.lua         # Memory search tool
 ├── evidence_corpus.lua       # Discover active evidence corpus
+├── task_manager.lua          # Sequential batch tool orchestration
 ├── evidence_hunt.lua         # Search for relevant records
 ├── evidence_gather.lua       # Retrieve bounded evidence
 ├── web_search.lua            # Web-search provider boundary
@@ -148,8 +149,11 @@ The available tools include:
 - `EvidenceCorpus` — discover the active corpus identifier.
 - `EvidenceHunt` — search for records relevant to a term or query.
 - `EvidenceGather` — retrieve bounded evidence from selected records.
+- `task_manager` — execute up to eight existing tools sequentially and return each result or structured failure; later calls continue after a failure.
 
 The local evidence workflow separates finding a relevant record from retrieving its content. Alice discovers the configured corpus through the Rust API instead of assuming a corpus name. Evidence returned to the model is bounded.
+
+`task_manager` accepts a fixed, ordered list of tool names and arguments. It returns a per-call status, arguments, result or structured error, and records nested calls in execution provenance. Calls continue after an individual failure. This first version does not pass one tool result into later call arguments; Alice must provide every call's arguments up front.
 
 A model's tool-call request is not proof that a tool succeeded. Alice executes the tool and handles its result; failures remain distinguishable from successful empty results.
 
@@ -194,6 +198,7 @@ Regression tests cover request boundaries, response policy, and web-search behav
 tests/request_boundary.lua
 tests/response_policy.lua
 tests/web_search.lua
+tests/task_manager.lua
 ```
 
 ## Troubleshooting
