@@ -38,6 +38,9 @@ local WebSearch = require("./web_search")
 local EvidenceHunt = require("./evidence_hunt")
 local EvidenceGather = require("./evidence_gather")
 local EvidenceCorpus = require("./evidence_corpus")
+local TaskManager = require("./task_manager")
+local HNTopNews = require("./hn_top_news")
+local LocalWeather = require("./local_weather")
 
 local available_tools = {
 MemorySearch.definition,
@@ -47,7 +50,10 @@ DiceRoll.definition,
 WebSearch.definition,
 EvidenceHunt.definition,
 EvidenceGather.definition,
-EvidenceCorpus.definition
+EvidenceCorpus.definition,
+TaskManager.definition,
+HNTopNews.definition,
+LocalWeather.definition
 }
 
 local Alice = {}

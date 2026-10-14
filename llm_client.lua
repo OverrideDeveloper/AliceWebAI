@@ -36,6 +36,9 @@ local WebSearch = require("./web_search")
 local EvidenceHunt = require("./evidence_hunt")
 local EvidenceGather = require("./evidence_gather")
 local EvidenceCorpus = require("./evidence_corpus")
+local TaskManager = require("./task_manager")
+local HNTopNews = require("./hn_top_news")
+local LocalWeather = require("./local_weather")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -92,6 +95,12 @@ local ToolHandlers = {
     end,
     EvidenceCorpus = function(arguments, callback)
         EvidenceCorpus.discover(arguments, callback)
+    end,
+    hn_top_news = function(arguments, callback)
+        HNTopNews.get(arguments, callback)
+    end,
+    local_weather = function(arguments, callback)
+        LocalWeather.get(arguments, callback)
     end,
 }
 
@@ -216,7 +225,8 @@ end
 
 local function execute_tool(
     tool_call,
-    callback
+    callback,
+    execution_context
 )
     if type(tool_call) ~= "table" then
         callback(
@@ -294,6 +304,9 @@ local function execute_tool(
         EvidenceHunt = true,
         EvidenceGather = true,
         EvidenceCorpus = true,
+        hn_top_news = true,
+        local_weather = true,
+        task_manager = true,
     }
 
     if asynchronous_tools[tool_name] then
@@ -320,7 +333,8 @@ local function execute_tool(
                         result,
                         nil
                     )
-                end
+                end,
+                execution_context
             )
 
         if not ok then
@@ -343,7 +357,8 @@ local function execute_tool(
     local ok, result =
         pcall(
             tool_func,
-            arguments
+            arguments,
+            execution_context
         )
 
     if not ok then
@@ -363,6 +378,7 @@ local function execute_tool(
         nil
     )
 end
+
 
 
 local function get_tool_calls(
@@ -391,7 +407,7 @@ local function serialize_tool_result(result)
     -- compacted before being sent to the model. Local evidence results
     -- also contain a "results" array, but their records are authoritative
     -- evidence and must not be projected through the web-search schema.
-    if result.results and result.corpus == nil then
+    if result.query ~= nil and result.results and result.corpus == nil then
         local compact = {
             query = result.query,
             results = {},
@@ -488,6 +504,94 @@ local function bounded_web_search_error(metadata, arguments)
     end
 
     return nil
+end
+
+-- Register after the shared search-budget helper so batched calls retain
+-- request-level limits and execution provenance.
+ToolHandlers.task_manager = function(arguments, callback, execution_context)
+    TaskManager.run(
+        arguments,
+        callback,
+        function(name, tool_arguments, done)
+            local metadata = execution_context and execution_context.metadata
+            local request_context = execution_context and execution_context.request_context
+
+            if request_context and request_context.closed == true then
+                done(nil, {
+                    category = "request_cancelled",
+                    message = "The request was cancelled before this tool ran",
+                })
+                return
+            end
+
+            if name == "web_search" and metadata then
+                local bounded_error =
+                    bounded_web_search_error(metadata, tool_arguments)
+
+                if bounded_error then
+                    done(nil, {
+                        category = "tool_limit",
+                        message = bounded_error,
+                    })
+                    return
+                end
+            end
+
+            if metadata then
+                metadata.tool_calls[#metadata.tool_calls + 1] = {
+                    tool_name = name,
+                    tool_round = request_context and request_context.tool_round or nil,
+                    arguments = tool_arguments,
+                    orchestrated_by = "task_manager",
+                }
+            end
+
+            Observability.log("tool_call", request_context, {
+                tool_round = request_context and request_context.tool_round or nil,
+                tool_name = name,
+                orchestrated_by = "task_manager",
+            })
+
+            local encoded, encode_error = json.encode(tool_arguments)
+            if not encoded then
+                done(nil, {
+                    category = "request_encoding_error",
+                    message = "Unable to encode arguments for "
+                        .. tostring(name) .. ": " .. tostring(encode_error),
+                })
+                return
+            end
+
+            execute_tool({
+                ["function"] = {
+                    name = name,
+                    arguments = encoded,
+                },
+            }, function(result, err)
+                if name == "web_search" and metadata and not err then
+                    metadata.web_evidence_used = true
+
+                    if type(result) == "table" then
+                        for _, item in ipairs(result.results or {}) do
+                            if item.url then
+                                metadata.web_urls[#metadata.web_urls + 1] = item.url
+                            end
+                        end
+                    end
+
+                    metadata.evidence_events[#metadata.evidence_events + 1] =
+                        Evidence.new(
+                            "web_search",
+                            Evidence.STATUS.RETRIEVED,
+                            "Web search tool executed successfully within TaskManager",
+                            {tool_name = name, orchestrated_by = "task_manager"}
+                        )
+                end
+
+                done(result, err)
+            end, execution_context)
+        end
+    )
 end
 
 local function execute_tool_calls(
@@ -624,7 +728,11 @@ local function execute_tool_calls(
                 metadata,
                 request_context
             )
-        end
+        end,
+        {
+            metadata = metadata,
+            request_context = request_context,
+        }
     )
 end
 
