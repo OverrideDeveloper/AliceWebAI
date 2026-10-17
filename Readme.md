@@ -57,6 +57,7 @@ Services bind to loopback by default. This is a local runtime, not a claim that 
 AliceWebAI/
 ├── alice.lua                 # Alice runtime and tool orchestration
 ├── llm_client.lua            # Inference and tool-call integration
+├── deck_draw.lua              # Stateful card, rune, and I Ching draws
 ├── web_server.lua            # Browser interface server
 ├── index.html                # Chat UI
 ├── memory_service.py         # HTTP service for semantic memory
@@ -65,6 +66,9 @@ AliceWebAI/
 ├── memory_store.lua          # Memory storage tool
 ├── memory_search.lua         # Memory search tool
 ├── evidence_corpus.lua       # Discover active evidence corpus
+├── task_manager.lua          # Sequential batch tool orchestration
+├── hn_top_news.lua            # Hacker News top-story API tool
+├── local_weather.lua          # Open-Meteo current weather and forecast
 ├── evidence_hunt.lua         # Search for relevant records
 ├── evidence_gather.lua       # Retrieve bounded evidence
 ├── web_search.lua            # Web-search provider boundary
@@ -143,13 +147,21 @@ The available tools include:
 
 - `current_time` — retrieve the current time.
 - `dice_roll` — roll dice, optionally returning individual rolls.
+- `deck_draw` — draw playing cards, tarot cards, Elder Futhark runes, or I Ching hexagrams without replacement; each used deck keeps its state in the running server and automatically reshuffles on exhaustion.
 - `memory_store` and `memory_search` — store and search semantic memories.
 - `web_search` — search the web through the configured provider boundary.
 - `EvidenceCorpus` — discover the active corpus identifier.
 - `EvidenceHunt` — search for records relevant to a term or query.
 - `EvidenceGather` — retrieve bounded evidence from selected records.
+- `task_manager` — execute up to eight existing tools sequentially and return each result or structured failure; later calls continue after a failure.
+- `hn_top_news` — retrieve up to five current top stories from the official Hacker News API, including article and discussion URLs.
+- `local_weather` — retrieve current conditions and a 1–7 day forecast from Open-Meteo for a named location, with Fahrenheit or Celsius temperatures.
+
+The daily-briefing tools use the asynchronous `lua-webcall-model` transport and Alice's `lunajson`-backed JSON adapter; they do not shell out to `curl`. Hacker News results retain article and discussion URLs, and weather results include the selected geocoded place and forecast units.
 
 The local evidence workflow separates finding a relevant record from retrieving its content. Alice discovers the configured corpus through the Rust API instead of assuming a corpus name. Evidence returned to the model is bounded.
+
+`task_manager` accepts a fixed, ordered list of tool names and arguments. It returns a per-call status, arguments, result or structured error, and records nested calls in execution provenance. Calls continue after an individual failure. This first version does not pass one tool result into later call arguments; Alice must provide every call's arguments up front.
 
 A model's tool-call request is not proof that a tool succeeded. Alice executes the tool and handles its result; failures remain distinguishable from successful empty results.
 
@@ -194,6 +206,9 @@ Regression tests cover request boundaries, response policy, and web-search behav
 tests/request_boundary.lua
 tests/response_policy.lua
 tests/web_search.lua
+tests/task_manager.lua
+tests/deck_draw.lua
+tests/digest_tools.lua
 ```
 
 ## Troubleshooting
