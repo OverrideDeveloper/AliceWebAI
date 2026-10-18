@@ -12,6 +12,14 @@ local created = GameState.run({
 assert(type(created) == "table" and created.success == true,
     "A session should be created")
 local session_id = created.session.session_id
+local listed = GameState.run({
+    operation = "list_sessions",
+    game_type = "blackjack",
+})
+assert(listed.success == true and listed.count == 1
+    and listed.sessions[1].session_id == session_id,
+    "Active sessions should be discoverable across separate requests")
+
 assert(type(session_id) == "string" and session_id ~= "",
     "The tool should return a usable session identifier")
 
