@@ -306,16 +306,21 @@ end
 
 local function build_recent_history(artifact)
     local history = {}
-    local turns = artifact.turns or {}
-    local first = math.max(1, #turns - RECENT_TURNS + 1)
-    for index = first, #turns do
-        local turn = turns[index]
-        -- The current turn is already being supplied as the final user message
-        -- by run_turn; only completed prior turns belong in this context window.
+    local completed_turns = {}
+
+    -- Select the last four completed turns before limiting the context window.
+    -- The current running turn is stored in the artifact but is supplied separately.
+    for _, turn in ipairs(artifact.turns or {}) do
         if turn.status ~= "running" then
-            if turn.prompt then history[#history + 1] = {role = "user", content = turn.prompt} end
-            if turn.response then history[#history + 1] = {role = "assistant", content = turn.response} end
+            completed_turns[#completed_turns + 1] = turn
         end
+    end
+
+    local first = math.max(1, #completed_turns - RECENT_TURNS + 1)
+    for index = first, #completed_turns do
+        local turn = completed_turns[index]
+        if turn.prompt then history[#history + 1] = {role = "user", content = turn.prompt} end
+        if turn.response then history[#history + 1] = {role = "assistant", content = turn.response} end
     end
     return history
 end
