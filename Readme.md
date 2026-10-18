@@ -57,6 +57,8 @@ Services bind to loopback by default. This is a local runtime, not a claim that 
 AliceWebAI/
 ├── alice.lua                 # Alice runtime and tool orchestration
 ├── llm_client.lua            # Inference and tool-call integration
+├── deck_draw.lua              # Stateful card, rune, and I Ching draws
+├── game_state.lua             # In-memory game sessions, players, bankrolls, and custom state
 ├── web_server.lua            # Browser interface server
 ├── index.html                # Chat UI
 ├── memory_service.py         # HTTP service for semantic memory
@@ -146,6 +148,8 @@ The available tools include:
 
 - `current_time` — retrieve the current time.
 - `dice_roll` — roll dice, optionally returning individual rolls.
+- `deck_draw` — draw playing cards, tarot cards, Elder Futhark runes, or I Ching hexagrams without replacement; `persist_state` defaults to `true` to retain each deck's state in the running server, or can be set to `false` for an isolated one-off draw. Persistent decks automatically reshuffle on exhaustion.
+- `game_state` — maintain in-memory game sessions, session players, player-specific bankrolls, validated balance adjustments, and extensible session/player state. State persists across tool calls while the Alice server process runs, but is lost when that process restarts.
 - `memory_store` and `memory_search` — store and search semantic memories.
 - `web_search` — search the web through the configured provider boundary.
 - `EvidenceCorpus` — discover the active corpus identifier.
@@ -205,6 +209,8 @@ tests/request_boundary.lua
 tests/response_policy.lua
 tests/web_search.lua
 tests/task_manager.lua
+tests/deck_draw.lua
+tests/game_state.lua
 tests/digest_tools.lua
 ```
 

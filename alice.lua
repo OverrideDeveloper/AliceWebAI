@@ -32,6 +32,8 @@ local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
+local DeckDraw = require("./deck_draw")
+local GameState = require("./game_state")
 local Observability = require("./observability")
 local ResponsePolicy = require("./response_policy")
 local WebSearch = require("./web_search")
@@ -47,6 +49,8 @@ MemorySearch.definition,
 MemoryStore.definition,
 CurrentTime.definition,
 DiceRoll.definition,
+DeckDraw.definition,
+GameState.definition,
 WebSearch.definition,
 EvidenceHunt.definition,
 EvidenceGather.definition,

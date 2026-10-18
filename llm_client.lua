@@ -32,6 +32,8 @@ local MemorySearch = require("./memory_search")
 local MemoryStore = require("./memory_store")
 local CurrentTime = require("./current_time")
 local DiceRoll = require("./dice_roll")
+local DeckDraw = require("./deck_draw")
+local GameState = require("./game_state")
 local WebSearch = require("./web_search")
 local EvidenceHunt = require("./evidence_hunt")
 local EvidenceGather = require("./evidence_gather")
@@ -84,6 +86,8 @@ local ToolHandlers = {
     end,
     current_time = CurrentTime.current_time,
     dice_roll = DiceRoll.dice_roll,
+    deck_draw = DeckDraw.draw,
+    game_state = GameState.run,
     web_search = function(arguments, callback)
         WebSearch.search(arguments, callback)
     end,

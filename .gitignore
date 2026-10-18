@@ -1,4 +1,5 @@
 *.json
+!decks.json
 *.tmp
 *.gguf
 *.xml
