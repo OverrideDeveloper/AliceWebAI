@@ -43,6 +43,7 @@ local EvidenceCorpus = require("./evidence_corpus")
 local TaskManager = require("./task_manager")
 local HNTopNews = require("./hn_top_news")
 local LocalWeather = require("./local_weather")
+local DreamTools = require("./dream_tools")
 
 local available_tools = {
 MemorySearch.definition,
@@ -57,7 +58,9 @@ EvidenceGather.definition,
 EvidenceCorpus.definition,
 TaskManager.definition,
 HNTopNews.definition,
-LocalWeather.definition
+LocalWeather.definition,
+DreamTools.trigger_definition,
+DreamTools.summary_definition
 }
 
 local Alice = {}

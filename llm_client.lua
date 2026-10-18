@@ -41,6 +41,7 @@ local EvidenceCorpus = require("./evidence_corpus")
 local TaskManager = require("./task_manager")
 local HNTopNews = require("./hn_top_news")
 local LocalWeather = require("./local_weather")
+local DreamTools = require("./dream_tools")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -77,7 +78,31 @@ LLMClient.interface = LlamaInterface.new({
     backend = LlamaCpp.new(LLMClient.config.backend),
 })
 
+-- Dreams may investigate using read-only tools. Stateful and durable-write
+-- tools are intentionally excluded from the dream's tool surface.
+local dream_tool_definitions = {
+    MemorySearch.definition,
+    CurrentTime.definition,
+    WebSearch.definition,
+    EvidenceHunt.definition,
+    EvidenceGather.definition,
+    EvidenceCorpus.definition,
+    HNTopNews.definition,
+    LocalWeather.definition,
+}
+
 local ToolHandlers = {
+    dream_trigger = function(arguments, callback, execution_context)
+        DreamTools.trigger(
+            arguments,
+            callback,
+            execution_context,
+            {call = LLMClient.call, tools = dream_tool_definitions}
+        )
+    end,
+    dream_summary = function(arguments)
+        return DreamTools.summary(arguments)
+    end,
     memory_store = function(arguments, callback)
         MemoryStore.store(arguments, callback, "web")
     end,
@@ -279,6 +304,19 @@ local function execute_tool(
         return
     end
 
+    local request_context =
+        execution_context and execution_context.request_context
+
+    if request_context
+        and type(request_context.allowed_tool_names) == "table"
+        and request_context.allowed_tool_names[tool_name] ~= true then
+        callback(nil, {
+            category = "tool_not_allowed",
+            message = "Tool is not permitted in this execution context: " .. tool_name,
+        })
+        return
+    end
+
     local tool_func =
         ToolHandlers[tool_name]
 
@@ -311,6 +349,7 @@ local function execute_tool(
         hn_top_news = true,
         local_weather = true,
         task_manager = true,
+        dream_trigger = true,
     }
 
     if asynchronous_tools[tool_name] then
@@ -678,6 +717,23 @@ local function execute_tool_calls(
     execute_tool(
         tool_call,
         function(result, err)
+
+            -- Dream artifacts record actual middleware tool outcomes, not
+            -- merely model-requested tool calls.
+            if request_context
+                and type(request_context.dream_record_tool_event) == "function" then
+                pcall(
+                    request_context.dream_record_tool_event,
+                    {
+                        type = "tool_result",
+                        tool_name = tool_name,
+                        arguments = arguments,
+                        status = err and "failed" or "success",
+                        result = result,
+                        error = err,
+                    }
+                )
+            end
 
             if err then
                 if type(err) == "table" then
@@ -1074,6 +1130,16 @@ function LLMClient.cancel(request_id)
     end
 
     context.closed = true
+
+    -- A long-running dream owns child inference requests. Cancel them before
+    -- completing the parent request so no detached dream continues afterward.
+    local children = context.child_requests or {}
+    for index = #children, 1, -1 do
+        local child = children[index]
+        if child and child.request_id and child.closed ~= true then
+            LLMClient.cancel(child.request_id)
+        end
+    end
 
     local cancel_inference =
         context.cancel_inference
