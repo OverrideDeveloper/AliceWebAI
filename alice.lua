@@ -233,8 +233,7 @@ if not file then
 end
 
 local write_ok, write_error =
-    file:write(encoded, "
-")
+    file:write(encoded, "\n")
 
 if not write_ok then
     file:close()
@@ -306,6 +305,21 @@ local override_stack = {}
 
 local loaded_history, history_error =
 load_conversation_history(HISTORY_FILE)
+
+local function message_count()
+local count = 0
+
+
+for _, message in ipairs(conversation_history) do
+    if message.role ~= "system_state" then
+        count = count + 1
+    end
+end
+
+return count
+
+
+end
 
 if loaded_history then
 for _, message in ipairs(loaded_history) do
@@ -460,16 +474,14 @@ handler_name,
 claim
 )
 print(string.format(
-"
-[System: %s override applied]",
+"\n[System: %s override applied]",
 tostring(handler_name)
 ))
 
 
 if claim then
     print(string.format(
-        "[Claim extracted: '%s']
-",
+        "[Claim extracted: '%s']\n",
         tostring(claim)
     ))
 end
@@ -484,10 +496,7 @@ local prompt = base_system_prompt
 if #override_stack > 0 then
     prompt =
         prompt ..
-        "
-
---- ACTIVE OVERRIDES ---
-"
+        "\n\n--- ACTIVE OVERRIDES ---\n"
 
     for i, override in
         ipairs(override_stack) do
@@ -495,8 +504,7 @@ if #override_stack > 0 then
         prompt =
             prompt ..
             string.format(
-                "%d. %s
-",
+                "%d. %s\n",
                 i,
                 override
             )
@@ -504,8 +512,7 @@ if #override_stack > 0 then
 
     prompt =
         prompt ..
-        "--- END OVERRIDES ---
-"
+        "--- END OVERRIDES ---\n"
 end
 
 return prompt
@@ -621,17 +628,13 @@ local web_overrides =
 if #web_overrides > 0 then
     prompt =
         prompt ..
-        "
-
---- WEB SELECTED OVERRIDES ---
-"
+        "\n\n--- WEB SELECTED OVERRIDES ---\n"
 
     for i, override in ipairs(web_overrides) do
         prompt =
             prompt ..
             string.format(
-                "%d. %s
-",
+                "%d. %s\n",
                 i,
                 override
             )
@@ -639,8 +642,7 @@ if #web_overrides > 0 then
 
     prompt =
         prompt ..
-        "--- END WEB SELECTED OVERRIDES ---
-"
+        "--- END WEB SELECTED OVERRIDES ---\n"
 end
 
 -- Identity is request-scoped. It is supplied by the web server
@@ -648,10 +650,7 @@ end
 if type(identity) == "table" then
     prompt =
         prompt ..
-        "
-
---- CURRENT USER IDENTITY ---
-"
+        "\n\n--- CURRENT USER IDENTITY ---\n"
 
     prompt =
         prompt ..
@@ -661,8 +660,7 @@ if type(identity) == "table" then
             identity.user_id or
             "unknown"
         ) ..
-        "
-"
+        "\n"
 
     prompt =
         prompt ..
@@ -671,16 +669,14 @@ if type(identity) == "table" then
             identity.name or
             "Unknown"
         ) ..
-        "
-"
+        "\n"
 
     if identity.email then
         prompt =
             prompt ..
             "Email: " ..
             tostring(identity.email) ..
-            "
-"
+            "\n"
     end
 
     prompt =
@@ -690,8 +686,7 @@ if type(identity) == "table" then
             identity.provider or
             "unknown"
         ) ..
-        "
-"
+        "\n"
 
     prompt =
         prompt ..
@@ -699,8 +694,7 @@ if type(identity) == "table" then
         tostring(
             identity.authenticated == true
         ) ..
-        "
-"
+        "\n"
 
     prompt =
         prompt ..
@@ -708,37 +702,27 @@ if type(identity) == "table" then
         tostring(
             identity.anonymous == true
         ) ..
-        "
-"
+        "\n"
 
     prompt =
         prompt ..
-        "--- END CURRENT USER IDENTITY ---
-"
+        "--- END CURRENT USER IDENTITY ---\n"
 end
 
 -- Make the current request explicit after conversation context is assembled.
 -- This is a request-scoped instruction, not persistent conversation state.
 prompt =
     prompt ..
-    "
-
---- CURRENT REQUEST ---
-" ..
+    "\n\n--- CURRENT REQUEST ---\n" ..
     "Request ID: " ..
     tostring(request_id or "unknown") ..
-    "
-" ..
-    "The following human message is the request you are answering now:
-" ..
+    "\n" ..
+    "The following human message is the request you are answering now:\n" ..
     tostring(current_request or "") ..
-    "
-" ..
+    "\n" ..
     "Determine tool use from this request. Do not inherit tool intent from " ..
-    "earlier messages.
-" ..
-    "--- END CURRENT REQUEST ---
-"
+    "earlier messages.\n" ..
+    "--- END CURRENT REQUEST ---\n"
 
 return prompt
 
@@ -785,8 +769,7 @@ local output = {}
 
         output[#output + 1] =
             string.format(
-                "%d. [%s]%s:
-%s",
+                "%d. [%s]%s:\n%s",
                 i,
                 role,
                 handler_note,
@@ -798,8 +781,7 @@ local output = {}
         "--- End History ---"
 
     return command_result(
-        table.concat(output, "
-")
+        table.concat(output, "\n")
     )
 end
 
