@@ -59,6 +59,9 @@ local function find_player(session, player_id)
 end
 
 local function copy_table(source)
+    if type(source) ~= "table" then
+        return source
+    end
     local result = {}
     for key, value in pairs(source or {}) do
         if type(value) == "table" then
@@ -207,7 +210,7 @@ function M.run(arguments)
     if operation == "get_player" or operation == "adjust_bankroll"
         or operation == "set_value" or operation == "get_value" then
         local scope = arguments.scope
-        if scope == nil and (operation == "adjust_bankroll") then
+        if scope == nil and (operation == "adjust_bankroll" or operation == "get_player") then
             scope = "player"
         end
         if scope ~= "session" and scope ~= "player" then
