@@ -310,8 +310,12 @@ local function build_recent_history(artifact)
     local first = math.max(1, #turns - RECENT_TURNS + 1)
     for index = first, #turns do
         local turn = turns[index]
-        if turn.prompt then history[#history + 1] = {role = "user", content = turn.prompt} end
-        if turn.response then history[#history + 1] = {role = "assistant", content = turn.response} end
+        -- The current turn is already being supplied as the final user message
+        -- by run_turn; only completed prior turns belong in this context window.
+        if turn.status ~= "running" then
+            if turn.prompt then history[#history + 1] = {role = "user", content = turn.prompt} end
+            if turn.response then history[#history + 1] = {role = "assistant", content = turn.response} end
+        end
     end
     return history
 end
