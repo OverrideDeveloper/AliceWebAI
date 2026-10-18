@@ -219,7 +219,7 @@ function M.draw(arguments)
         requested_count = count,
         drawn_count = #drawn,
         deck_size = total,
-        remaining = #remaining_pool,
+        remaining = persist_state and #state.remaining or #remaining_pool,
         persist_state = persist_state,
         reshuffled = reshuffled,
     }
