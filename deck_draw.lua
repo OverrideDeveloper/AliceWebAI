@@ -19,7 +19,7 @@
 -- https://www.gnu.org/licenses/.
 --
 -- deck_draw.lua
--- Draw from named decks, keeping each active deck's state in memory.
+-- Draw from named decks, optionally keeping each active deck's state in memory.
 -- Lua 5.1 compatible.
 
 local json = require("./json")
@@ -28,7 +28,7 @@ local M = {}
 
 local DECKS_PATH = "decks.json"
 
--- Definitions are decoded once. Each deck gets its own mutable draw state.
+-- Definitions are decoded once. Persistent draw state is maintained per deck.
 local deck_definitions = nil
 local deck_states = {}
 local random_seeded = false
@@ -92,14 +92,9 @@ local function load_definitions()
     return deck_definitions
 end
 
-local function get_deck_state(deck_name)
+local function get_deck_entries(deck_name)
     if type(deck_name) ~= "string" or deck_name == "" then
         return nil, "deck is required"
-    end
-
-    local state = deck_states[deck_name]
-    if state then
-        return state
     end
 
     local definitions, load_error = load_definitions()
@@ -118,6 +113,23 @@ local function get_deck_state(deck_name)
         end
     end
 
+    return entries
+end
+
+local function get_deck_state(deck_name, entries)
+    local state = deck_states[deck_name]
+    if state then
+        return state
+    end
+
+    if not entries then
+        local entries_error
+        entries, entries_error = get_deck_entries(deck_name)
+        if not entries then
+            return nil, entries_error
+        end
+    end
+
     state = {
         entries = entries,
         remaining = shuffled_copy(entries),
@@ -133,10 +145,35 @@ function M.draw(arguments)
         return "Error: arguments must be an object"
     end
 
+    local persist_state = arguments.persist_state
+    if persist_state == nil then
+        -- Preserve the original stateful behavior unless explicitly disabled.
+        persist_state = true
+    end
+
+    if type(persist_state) ~= "boolean" then
+        return "Error: persist_state must be a boolean"
+    end
+
     local deck_name = arguments.deck
-    local state, state_error = get_deck_state(deck_name)
-    if not state then
-        return "Error: " .. tostring(state_error)
+    local state
+    local entries
+    local total
+
+    if persist_state then
+        local state_error
+        state, state_error = get_deck_state(deck_name)
+        if not state then
+            return "Error: " .. tostring(state_error)
+        end
+        total = state.total
+    else
+        local entries_error
+        entries, entries_error = get_deck_entries(deck_name)
+        if not entries then
+            return "Error: " .. tostring(entries_error)
+        end
+        total = #entries
     end
 
     local count = arguments.count
@@ -147,21 +184,31 @@ function M.draw(arguments)
     if type(count) ~= "number"
         or count % 1 ~= 0
         or count < 1
-        or count > state.total then
+        or count > total then
         return "Error: count must be an integer between 1 and "
-            .. tostring(state.total)
+            .. tostring(total)
+    end
+
+    -- A non-persistent draw starts from a freshly shuffled copy each time.
+    -- It is unique within this call but neither reads nor changes deck_states.
+    local remaining_pool
+    if persist_state then
+        remaining_pool = state.remaining
+    else
+        remaining_pool = shuffled_copy(entries)
     end
 
     local drawn = {}
     local reshuffled = false
 
-    -- A single request never crosses into a new cycle. If fewer entries
-    -- remain than requested, return the remainder, then reset the deck.
-    while #drawn < count and #state.remaining > 0 do
-        drawn[#drawn + 1] = table.remove(state.remaining)
+    -- A single request never crosses into a new cycle. For persistent draws,
+    -- exhaustion resets the shared deck for the next call. One-off draws have
+    -- no shared cycle to reset.
+    while #drawn < count and #remaining_pool > 0 do
+        drawn[#drawn + 1] = table.remove(remaining_pool)
     end
 
-    if #state.remaining == 0 then
+    if persist_state and #remaining_pool == 0 then
         state.remaining = shuffled_copy(state.entries)
         reshuffled = true
     end
@@ -171,8 +218,9 @@ function M.draw(arguments)
         drawn = drawn,
         requested_count = count,
         drawn_count = #drawn,
-        deck_size = state.total,
-        remaining = #state.remaining,
+        deck_size = total,
+        remaining = #remaining_pool,
+        persist_state = persist_state,
         reshuffled = reshuffled,
     }
 end
@@ -184,11 +232,14 @@ M.definition = {
         description =
             "Draw one or more entries from a named deck without replacement. "
             .. "Use the exact deck key: standard_playing_cards, tarot_rider_waite_smith, "
-            .. "elder_futhark_runes, or i_ching_king_wen. The server keeps each used deck "
-            .. "in memory. When a deck is exhausted it is automatically shuffled for a new "
-            .. "cycle. If fewer entries remain than requested, the tool returns only those "
-            .. "remaining entries and reshuffles; one call never spans two cycles. "
-            .. "Never invent a draw; use this tool for actual random selections.",
+            .. "elder_futhark_runes, or i_ching_king_wen. Set persist_state=true to keep "
+            .. "the deck's remaining entries in server memory across calls; this defaults "
+            .. "to true for compatibility. Set persist_state=false for a one-off draw from "
+            .. "a freshly shuffled deck; it will not read or modify persistent draw state. "
+            .. "Persistent decks automatically reshuffle when exhausted. If fewer entries "
+            .. "remain than requested, a persistent draw returns only those remaining entries "
+            .. "and reshuffles; one call never spans two cycles. Never invent a draw; use "
+            .. "this tool for actual random selections.",
         parameters = {
             type = "object",
             properties = {
@@ -207,6 +258,12 @@ M.definition = {
                     minimum = 1,
                     maximum = 78,
                     description = "Number of entries to draw; defaults to 1.",
+                },
+                persist_state = {
+                    type = "boolean",
+                    description =
+                        "Keep this deck's remaining entries in server memory across calls. "
+                        .. "Defaults to true; set false for a one-off draw.",
                 },
             },
             required = {
