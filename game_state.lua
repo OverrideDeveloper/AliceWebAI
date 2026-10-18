@@ -147,6 +147,35 @@ function M.run(arguments)
         }
     end
 
+    if operation == "list_sessions" then
+        local result = {}
+        local game_type = arguments.game_type
+        for _, session in pairs(sessions) do
+            if game_type == nil or session.game_type == game_type then
+                local player_count = 0
+                for _ in pairs(session.players) do
+                    player_count = player_count + 1
+                end
+                result[#result + 1] = {
+                    session_id = session.session_id,
+                    name = session.name,
+                    game_type = session.game_type,
+                    created_at = session.created_at,
+                    player_count = player_count,
+                }
+            end
+        end
+        table.sort(result, function(a, b)
+            return a.session_id < b.session_id
+        end)
+        return {
+            success = true,
+            operation = operation,
+            sessions = result,
+            count = #result,
+        }
+    end
+
     local session, session_error = find_session(arguments.session_id)
     if not session then
         return "Error: " .. session_error
@@ -337,6 +366,7 @@ M.definition = {
         description =
             "Maintain authoritative in-memory state for ongoing games. "
             .. "Use create_session first, then use the returned session_id for later operations. "
+            .. "Use list_sessions to rediscover active sessions by name/type across separate requests. "
             .. "Sessions contain players; each player has an independent bankroll and player state. "
             .. "Use add_player to register a participant, get_state to retrieve the complete session, "
             .. "get_player to retrieve one player, and adjust_bankroll to apply a validated signed "
@@ -351,6 +381,7 @@ M.definition = {
                     type = "string",
                     enum = {
                         "create_session",
+                        "list_sessions",
                         "add_player",
                         "get_state",
                         "get_player",
