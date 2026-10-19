@@ -10,7 +10,7 @@ local M = {}
 
 local DEFAULT_TIMEOUT_SECONDS = 30
 local DEFAULT_MAX_TIMEOUT_SECONDS = 120
-local DEFAULT_MAX_OUTPUT_BYTES = 32768
+local DEFAULT_MAX_OUTPUT_BYTES = 8192
 local MAX_COMMAND_BYTES = 16384
 local EXIT_MARKER = "__ALICE_VM_EXIT_CODE__="
 
@@ -46,7 +46,7 @@ local function parse_integer(value, default, minimum, maximum)
 end
 
 local function read_config()
-    return {
+    local config = {
         enabled = parse_boolean(get_env("ALICE_VM_ENABLED"), false),
         vm_name = get_env("ALICE_VM_NAME"),
         guest_user = get_env("ALICE_VM_GUEST_USER"),
@@ -65,6 +65,10 @@ local function read_config()
             DEFAULT_MAX_OUTPUT_BYTES, 1024, 262144
         ),
     }
+    if config.default_timeout_seconds > config.max_timeout_seconds then
+        config.default_timeout_seconds = config.max_timeout_seconds
+    end
+    return config
 end
 
 local function base64_encode(input)
@@ -361,7 +365,8 @@ function M.execute(arguments, callback)
         finish({
             vm = config.vm_name,
             guest_user = config.guest_user,
-            command = command,
+            command_bytes = #command,
+            status = guest_exit_code == 0 and "success" or "command_failed",
             exit_code = guest_exit_code,
             duration_ms = duration_ms,
             timed_out = guest_exit_code == 124 or guest_exit_code == 137,
