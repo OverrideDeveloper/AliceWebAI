@@ -399,7 +399,7 @@ try {
     $script:VmShutdownOnExit = ConvertTo-VMBoolean (Get-VMSetting "ALICE_VM_SHUTDOWN_ON_EXIT" $true) "ALICE_VM_SHUTDOWN_ON_EXIT"
     $vmTimeout = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_TIMEOUT_SECONDS" 30) "ALICE_VM_TIMEOUT_SECONDS" 1 600
     $vmMaxTimeout = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_MAX_TIMEOUT_SECONDS" 120) "ALICE_VM_MAX_TIMEOUT_SECONDS" 1 600
-    $vmMaxOutput = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_MAX_OUTPUT_BYTES" 32768) "ALICE_VM_MAX_OUTPUT_BYTES" 1024 262144
+    $vmMaxOutput = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_MAX_OUTPUT_BYTES" 8192) "ALICE_VM_MAX_OUTPUT_BYTES" 1024 262144
     if ($vmTimeout -gt $vmMaxTimeout) {
         throw "ALICE_VM_TIMEOUT_SECONDS cannot exceed ALICE_VM_MAX_TIMEOUT_SECONDS."
     }
