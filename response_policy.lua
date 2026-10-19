@@ -244,6 +244,23 @@ function M.decorate(response, metadata)
                     )
                 end
             end
+
+            -- Only tools that explicitly provide a small human-facing result
+            -- projection are shown here; arbitrary tool payloads stay out of the
+            -- footer.
+            if type(tool_call.display_result) == "table" then
+                lines[#lines + 1] = "  result:"
+                for _, key in ipairs(sorted_object_keys(tool_call.display_result)) do
+                    lines[#lines + 1] = string.format(
+                        "    %s: %s",
+                        tostring(key),
+                        format_tool_argument(
+                            tool_call.display_result[key],
+                            1
+                        )
+                    )
+                end
+            end
         end
 
         decorated = decorated .. "\n" .. table.concat(lines, "\n")

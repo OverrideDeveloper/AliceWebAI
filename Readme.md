@@ -70,6 +70,7 @@ AliceWebAI/
 ├── task_manager.lua          # Sequential batch tool orchestration
 ├── hn_top_news.lua            # Hacker News top-story API tool
 ├── local_weather.lua          # Open-Meteo current weather and forecast
+├── dream_tools.lua            # Bounded dream sessions and saved summaries
 ├── evidence_hunt.lua         # Search for relevant records
 ├── evidence_gather.lua       # Retrieve bounded evidence
 ├── web_search.lua            # Web-search provider boundary
@@ -158,6 +159,8 @@ The available tools include:
 - `task_manager` — execute up to eight existing tools sequentially and return each result or structured failure; later calls continue after a failure.
 - `hn_top_news` — retrieve up to five current top stories from the official Hacker News API, including article and discussion URLs.
 - `local_weather` — retrieve current conditions and a 1–7 day forecast from Open-Meteo for a named location, with Fahrenheit or Celsius temperatures.
+- `dream_trigger` — run a bounded topic-driven exploration session. The initial and every-fifth-turn memory searches reinforce the subject; permitted read-only research tools are available during the dream. The default budget is 16 turns, with a hard maximum of 32, and checkpoint summaries default to every 8 turns. The transcript and actual tool results are saved under `dreams/` as JSON.
+- `dream_summary` — retrieve a dream's final summary and checkpoints by its returned `dream_id`; optionally include the recorded transcript and tool events.
 
 The daily-briefing tools use the asynchronous `lua-webcall-model` transport and Alice's `lunajson`-backed JSON adapter; they do not shell out to `curl`. Hacker News results retain article and discussion URLs, and weather results include the selected geocoded place and forecast units.
 
@@ -212,6 +215,7 @@ tests/task_manager.lua
 tests/deck_draw.lua
 tests/game_state.lua
 tests/digest_tools.lua
+tests/dream_tools.lua
 ```
 
 ## Troubleshooting

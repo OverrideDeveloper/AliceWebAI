@@ -86,4 +86,35 @@ assert(
     "Tool provenance must not be appended when no tools executed"
 )
 
+local dream_footer =
+    ResponsePolicy.decorate(
+        "The dream concluded.",
+        {
+            tool_calls = {
+                {
+                    tool_name = "dream_trigger",
+                    arguments = {max_turns = 12},
+                    display_result = {
+                        dream_id = "20261018T212057-303824",
+                        status = "completed",
+                        turns_completed = 12,
+                    },
+                },
+            },
+        }
+    )
+
+assert(
+    dream_footer:find('    dream_id: "20261018T212057-303824"', 1, true),
+    "Dream identifier returned by the tool must be visible in the execution footer"
+)
+assert(
+    dream_footer:find('    status: "completed"', 1, true),
+    "Dream status must be visible alongside its identifier"
+)
+assert(
+    dream_footer:find("    turns_completed: 12", 1, true),
+    "Completed dream turn count must be visible alongside its identifier"
+)
+
 print("response_policy.lua tool provenance tests passed")
