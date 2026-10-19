@@ -260,7 +260,12 @@ function M.execute(arguments, callback)
             parts, current_bytes, truncated = stderr_parts, stderr_bytes, stderr_truncated
         end
 
-        local remaining = config.max_output_bytes - current_bytes
+        local stream_limit = config.max_output_bytes
+        if which == "stdout" then
+            -- Reserve space for the wrapper exit marker appended after user output.
+            stream_limit = stream_limit + #EXIT_MARKER + 32
+        end
+        local remaining = stream_limit - current_bytes
         if remaining > 0 then
             parts[#parts + 1] = chunk:sub(1, remaining)
             current_bytes = current_bytes + math.min(#chunk, remaining)
@@ -322,6 +327,11 @@ function M.execute(arguments, callback)
         local stdout = ascii_sanitize(table.concat(stdout_parts))
         local stderr = ascii_sanitize(table.concat(stderr_parts))
         local guest_stdout, guest_exit_code = strip_exit_marker(stdout)
+        if #guest_stdout > config.max_output_bytes then
+            guest_stdout = guest_stdout:sub(1, config.max_output_bytes)
+            stdout_truncated = true
+            output_limit_hit = true
+        end
         local duration_ms = math.max(0, uv.now() - started_at)
 
         if timed_out then
