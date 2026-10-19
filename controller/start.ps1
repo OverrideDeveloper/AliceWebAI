@@ -320,11 +320,10 @@ function Get-CorpusName {
 }
 
 function Stop-ManagedProcesses {
-    if ($script:ManagedProcesses.Count -eq 0) {
+    if ($script:ManagedProcesses.Count -gt 0) {
         Write-Host ""
+        Write-Status "STOPPING" "Stopping processes started by this controller..." Yellow
     }
-    Write-Host ""
-    Write-Status "STOPPING" "Stopping processes started by this controller..." Yellow
 
     foreach ($name in @("Alice", "Inference", "Memory", "Evidence")) {
         foreach ($entry in $script:ManagedProcesses | Where-Object { $_.Name -eq $name }) {
