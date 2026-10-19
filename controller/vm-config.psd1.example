@@ -1,0 +1,17 @@
+@{
+    # Copy this file to vm-config.psd1 and edit the local copy.
+    # Environment variables with the same names override these values.
+
+    ALICE_VM_ENABLED = $false
+    ALICE_VM_NAME = "AliceDebian"
+    ALICE_VM_GUEST_USER = "alice-exec"
+    ALICE_VM_GUEST_PASSWORD_FILE = "C:\secure\alice-guest-password.txt"
+    ALICE_VM_VBOXMANAGE_PATH = ""
+
+    ALICE_VM_TIMEOUT_SECONDS = 30
+    ALICE_VM_MAX_TIMEOUT_SECONDS = 120
+    ALICE_VM_MAX_OUTPUT_BYTES = 32768
+
+    ALICE_VM_START_ON_LAUNCH = $true
+    ALICE_VM_SHUTDOWN_ON_EXIT = $true
+}
