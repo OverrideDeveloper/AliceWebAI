@@ -93,6 +93,24 @@ function Get-VMState {
     throw ("Could not determine the state of VirtualBox VM '{0}'." -f $script:VmName)
 }
 
+function Test-VMGuestControl {
+    try {
+        Invoke-VBoxManage -Arguments @(
+            "--nologo", "guestcontrol", $script:VmName, "run",
+            "--exe", "/usr/bin/true",
+            "--username", $script:VmGuestUser,
+            "--passwordfile", $script:VmGuestPasswordFile,
+            "--wait-stdout", "--wait-stderr",
+            "--timeout", "5000"
+        ) | Out-Null
+        return $true
+    }
+    catch {
+        $script:VmGuestControlLastError = $_.Exception.Message
+        return $false
+    }
+}
+
 function Write-Status {
     param(
         [string]$State,
@@ -533,6 +551,22 @@ try {
         else {
             Write-Status "OK" ("VirtualBox VM '{0}' is already running; controller will not shut it down on exit." -f $script:VmName) Green
         }
+
+        Write-Status "WAIT" "Waiting for VirtualBox Guest Additions and guest credentials to become ready..." Yellow
+        $guestControlReady = $false
+        $guestControlDeadline = (Get-Date).AddSeconds(90)
+        do {
+            if (Test-VMGuestControl) {
+                $guestControlReady = $true
+                break
+            }
+            Start-Sleep -Seconds 3
+        } while ((Get-Date) -lt $guestControlDeadline)
+
+        if (-not $guestControlReady) {
+            throw ("VM '{0}' is running, but Guest Additions guest execution or the configured guest credentials are not ready. Last error: {1}" -f $script:VmName, $script:VmGuestControlLastError)
+        }
+        Write-Status "READY" ("VirtualBox Guest Additions are accepting guest commands for '{0}'." -f $script:VmGuestUser) Green
 
         $vmService = [pscustomobject]@{
             Name = "VM"
