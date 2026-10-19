@@ -42,6 +42,7 @@ local TaskManager = require("./task_manager")
 local HNTopNews = require("./hn_top_news")
 local LocalWeather = require("./local_weather")
 local DreamTools = require("./dream_tools")
+local VMExecution = require("./vm_execution")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -130,6 +131,9 @@ local ToolHandlers = {
     end,
     local_weather = function(arguments, callback)
         LocalWeather.get(arguments, callback)
+    end,
+    vm_execute = function(arguments, callback)
+        VMExecution.execute(arguments, callback)
     end,
 }
 
@@ -350,6 +354,7 @@ local function execute_tool(
         local_weather = true,
         task_manager = true,
         dream_trigger = true,
+        vm_execute = true,
     }
 
     if asynchronous_tools[tool_name] then
