@@ -139,6 +139,12 @@ local function strip_exit_marker(stdout)
     return stdout, nil
 end
 
+local function ascii_sanitize(value)
+    value = tostring(value or "")
+    value = value:gsub("[%z\\128-\\255]", "?")
+    return value
+end
+
 local function error_result(category, message, extra)
     local result = extra or {}
     result.category = category
@@ -279,7 +285,11 @@ function M.execute(arguments, callback)
         .. " command_bytes=" .. tostring(#command))
 
     local spawn_ok, spawn_error = pcall(function()
-        child = childprocess.spawn(config.vboxmanage, argv)
+        local options = {}
+        if process and type(process.env) == "table" then
+            options.env = process.env
+        end
+        child = childprocess.spawn(config.vboxmanage, argv, options)
     end)
     if not spawn_ok or not child then
         finish(nil, error_result(
@@ -301,16 +311,16 @@ function M.execute(arguments, callback)
             "vm_process_error",
             "VBoxManage process error: " .. tostring(err),
             {
-                stdout = table.concat(stdout_parts),
-                stderr = table.concat(stderr_parts),
+                stdout = ascii_sanitize(table.concat(stdout_parts)),
+                stderr = ascii_sanitize(table.concat(stderr_parts)),
                 duration_ms = math.max(0, uv.now() - started_at),
             }
         ))
     end)
 
     child:once("close", function(host_exit_code, signal)
-        local stdout = table.concat(stdout_parts)
-        local stderr = table.concat(stderr_parts)
+        local stdout = ascii_sanitize(table.concat(stdout_parts))
+        local stderr = ascii_sanitize(table.concat(stderr_parts))
         local guest_stdout, guest_exit_code = strip_exit_marker(stdout)
         local duration_ms = math.max(0, uv.now() - started_at)
 
