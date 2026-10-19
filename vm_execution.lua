@@ -141,7 +141,7 @@ end
 
 local function ascii_sanitize(value)
     value = tostring(value or "")
-    value = value:gsub("[%z\\128-\\255]", "?")
+    value = value:gsub("[%z\128-\255]", "?")
     return value
 end
 
