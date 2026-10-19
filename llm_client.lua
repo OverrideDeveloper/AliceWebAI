@@ -708,11 +708,12 @@ local function execute_tool_calls(
 
     -- Record execution at the middleware boundary. The tool has passed
     -- validation and its handler is about to run.
-    metadata.tool_calls[#metadata.tool_calls + 1] = {
+    local execution_record = {
         tool_name = tool_name,
         tool_round = request_context and request_context.tool_round or nil,
         arguments = arguments,
     }
+    metadata.tool_calls[#metadata.tool_calls + 1] = execution_record
 
     execute_tool(
         tool_call,
@@ -750,6 +751,20 @@ local function execute_tool_calls(
                         "Tool error: "
                         .. tostring(err)
                 end
+            end
+
+            -- Surface the dream identifier from the actual middleware result
+            -- in the human-facing execution footer. Keep the displayed result
+            -- deliberately small; the full dream artifact remains available through
+            -- dream_summary.
+            if tool_name == "dream_trigger" and err == nil
+                and type(result) == "table"
+                and type(result.dream_id) == "string" then
+                execution_record.display_result = {
+                    dream_id = result.dream_id,
+                    status = result.status,
+                    turns_completed = result.turns_completed,
+                }
             end
 
             if tool_name == "web_search" and err == nil then
