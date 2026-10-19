@@ -28,14 +28,14 @@ Luvit web_server.lua :8080
   |
   v
 Alice Lua middleware
-  |-----------------------|
-  |           |           |
-  v           v           v
-llm_client  Memory tools  Local evidence tools
-  |           |           |
-  v           v           v
-llama.cpp   Python        Rust Data Engine
-:50006      memory        :60005
+  |-----------------------|--------------------|
+  |           |           |                    |
+  v           v           v                    v
+llm_client  Memory tools  Local evidence tools VM execution
+  |           |           |                    |
+  v           v           v                    v
+llama.cpp   Python        Rust Data Engine    VirtualBox guest
+:50006      memory        :60005              Debian/Linux
              service
              :8090
                |
@@ -72,6 +72,7 @@ AliceWebAI/
 ├── hn_top_news.lua            # Hacker News top-story API tool
 ├── local_weather.lua          # Open-Meteo current weather and forecast
 ├── dream_tools.lua            # Bounded dream sessions and saved summaries
+├── vm_execution.lua            # Synchronous VirtualBox Linux guest execution
 ├── evidence_hunt.lua         # Search for relevant records
 ├── evidence_gather.lua       # Retrieve bounded evidence
 ├── web_search.lua            # Web-search provider boundary
@@ -123,7 +124,7 @@ No Ollama installation is required.
 
 5. To enable local evidence, build `dataset-stream-parser-api.exe` from the companion repository and place it in `bin\`. Put an XML/XML.BZ2 corpus file or a subdirectory of text files in `corpus\`. The controller can also run without local evidence.
 
-6. To enable VM execution, copy `controller\\vm-config.psd1.example` to `controller\\vm-config.psd1`, configure the VM name, guest username, password-file path, and enable the feature. The local configuration file is ignored by Git. Environment variables with the same names override file values.
+6. To enable VM execution, install Debian 13 minimal in VirtualBox, install VirtualBox Guest Additions in the guest, and create the unprivileged guest account used for execution. Copy `controller\vm-config.psd1.example` to `controller\vm-config.psd1`, configure the VM name, guest username, password-file path, and set `ALICE_VM_ENABLED` to `$true`. The password file should contain the guest account password on the host and live outside the repository with access restricted to the account running Alice. The local configuration file is ignored by Git. Environment variables with the same names override file values.
 
 7. From the repository root, start Alice:
 
@@ -137,7 +138,7 @@ Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) when Alice reports ready.
 
 The controller selects one corpus per run. For multiple corpus candidates, it asks which one to load. Corpus preparation may take a while; the evidence API becomes ready when preparation finishes, independently of the other services.
 
-When VM execution is enabled, the controller starts the configured VM headlessly if it is powered off, monitors its state alongside the other services, and requests a graceful guest shutdown on controller exit if the controller started it. The execution adapter requires VirtualBox Guest Additions and a guest password file accepted by `VBoxManage guestcontrol`. The guest command timeout and returned output are bounded.
+When VM execution is enabled, the controller starts the configured VM headlessly if it is not already running, monitors its state alongside the other services, and requests a graceful guest shutdown on controller exit if the controller started it. The execution adapter requires working VirtualBox Guest Additions and a host-side password file accepted by `VBoxManage guestcontrol`. The guest command timeout and returned output are bounded. Environment variables override the local PowerShell data file, which overrides documented defaults. The VM can be configured to use a host-only adapter for manual SSH administration; Alice itself executes through Guest Additions and does not need SSH access.
 
 ### Local endpoints
 
