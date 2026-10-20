@@ -186,7 +186,7 @@ Configure paths with environment variables:
 - `ALICE_CONVERSATION_HISTORY_FILE` changes the active-history path.
 - `ALICE_HISTORY_ARCHIVE_FILE` changes the archive path. The default is `C:\data\AliceConversationHistory\data.json`. The parent directory must already exist.
 
-The separate Python history API must read the same archive file. In its server script, use `DATA_FILE = os.environ.get("ALICE_HISTORY_ARCHIVE_FILE", r"C:\data\AliceConversationHistory\data.json")` and ensure the variable is set in the server process environment if you override the default.
+The separate Python history API must read the same archive file. Add `import os` to its imports and use `DATA_FILE = os.environ.get("ALICE_HISTORY_ARCHIVE_FILE", r"C:\data\AliceConversationHistory\data.json")`. Ensure the variable is set in the server process environment if you override the default.
 
 ChromaDB-backed semantic memory is stored separately under `memory/chroma`.
 

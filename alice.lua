@@ -187,15 +187,9 @@ local function recover_history_file(path)
     local backup_path = path .. ".bak"
 
     if file_exists(path) then
-        if file_exists(backup_path) then
-            local removed, remove_error = os.remove(backup_path)
-            if not removed then
-                return nil,
-                    "Unable to remove stale history backup '" ..
-                    backup_path .. "': " .. tostring(remove_error)
-            end
-        end
-
+        -- Leave any backup untouched until a later successful save. The
+        -- current file may exist but be malformed, and the backup may be the
+        -- only recoverable copy.
         return true
     end
 
