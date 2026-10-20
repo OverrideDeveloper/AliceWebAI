@@ -657,7 +657,7 @@ local function handle_message(req, res)
                     end
 
                     print(
-                        "[INFO] Ollama response returned"
+                        "[INFO] Inference engine response returned"
                     )
 
                     Observability.log("http_message_completed", request_context, {
