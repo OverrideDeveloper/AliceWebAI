@@ -208,6 +208,23 @@ if type(data) ~= "table" then
         "History JSON must contain an array"
 end
 
+-- Migrate older history entries that stored the decorated human-facing reply
+-- as assistant content. Preserve that transcript in display_content while
+-- keeping only the model-authored reply in content.
+for _, message in ipairs(data) do
+    if type(message) == "table"
+       and message.role == "assistant"
+       and type(message.content) == "string"
+       and type(message.display_content) ~= "string" then
+        local model_content = ResponsePolicy.model_content(message.content)
+
+        if model_content ~= message.content then
+            message.display_content = message.content
+            message.content = model_content
+        end
+    end
+end
+
 return data
 
 
@@ -778,7 +795,7 @@ local output = {}
                 i,
                 role,
                 handler_note,
-                tostring(msg.content or "")
+                tostring(msg.display_content or msg.content or "")
             )
     end
 
@@ -1064,8 +1081,12 @@ LLMClient.call(
 
         add_message(
             "assistant",
-            final_response,
+            response,
             {
+                -- Keep the model-authored response separate from the decorated
+                -- version returned to the human and shown in transcript views.
+                display_content = final_response,
+
                 user_id =
                     identity and
                     (identity.id or identity.user_id)
