@@ -216,7 +216,7 @@ end
 -- back to the model as though it were part of the assistant's own reply.
 function M.model_content(response)
     local text = tostring(response or "")
-    local footer_start = text:find("\\n\\n--- Tool execution ---", 1, true)
+    local footer_start = text:find("\n\n--- Tool execution ---", 1, true)
 
     if footer_start then
         return text:sub(1, footer_start - 1)
