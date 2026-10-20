@@ -179,9 +179,19 @@ A model's tool-call request is not proof that a tool succeeded. Alice executes t
 
 ## Conversation history and semantic memory
 
-Conversation history is stored in `conversation_history.json`. ChromaDB-backed semantic memory is stored separately under `memory/chroma`.
+The active conversation window is stored in `conversation_history.json` and is capped at 128 messages for context management. The durable conversation archive is stored separately as a JSON array in `C:\data\AliceConversationHistory\data.json` by default; it is not trimmed with the active window. Every message receives a stable `id`, allowing Alice to reconcile an interrupted archive save without duplicating identical messages. The archive begins with messages created after this implementation is deployed; legacy active-history messages are not imported into it.
 
-- Conversation history preserves the conversational exchange.
+Configure paths with environment variables:
+
+- `ALICE_CONVERSATION_HISTORY_FILE` changes the active-history path.
+- `ALICE_HISTORY_ARCHIVE_FILE` changes the archive path. The default is `C:\data\AliceConversationHistory\data.json`. The parent directory must already exist.
+
+The separate Python history API must read the same archive file. In its server script, use `DATA_FILE = os.environ.get("ALICE_HISTORY_ARCHIVE_FILE", r"C:\data\AliceConversationHistory\data.json")` and ensure the variable is set in the server process environment if you override the default.
+
+ChromaDB-backed semantic memory is stored separately under `memory/chroma`.
+
+- Conversation history preserves the active conversational exchange.
+- The durable archive preserves the growing transcript beyond the active window.
 - Semantic memory stores selected information for later retrieval.
 - Lua memory tools communicate with the Python memory service through `memory_client.lua`.
 
