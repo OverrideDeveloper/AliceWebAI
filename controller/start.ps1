@@ -32,6 +32,84 @@ $script:ManagedProcesses = @()
 $script:Services = @()
 $script:RuntimeReadyAnnounced = $false
 $script:EvidenceReadyAnnounced = $false
+$script:VmConfig = @{}
+$script:VmEnabled = $false
+$script:VmStartedByController = $false
+$script:VmShutdownOnExit = $true
+$script:VmStartOnLaunch = $true
+$script:VmName = ""
+$script:VmGuestUser = ""
+$script:VmGuestPasswordFile = ""
+$script:VmVBoxManagePath = ""
+
+function Get-VMSetting {
+    param([string]$Name, $Default)
+
+    $environmentValue = [Environment]::GetEnvironmentVariable($Name, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($environmentValue)) {
+        return $environmentValue
+    }
+    if ($script:VmConfig.ContainsKey($Name)) {
+        return $script:VmConfig[$Name]
+    }
+    return $Default
+}
+
+function ConvertTo-VMBoolean {
+    param($Value, [string]$Name)
+    if ($Value -is [bool]) { return $Value }
+    $text = [string]$Value
+    if ($text -match '^(?i:true|1|yes|on)$') { return $true }
+    if ($text -match '^(?i:false|0|no|off)$') { return $false }
+    throw ("Invalid boolean value for {0}: {1}" -f $Name, $text)
+}
+
+function ConvertTo-VMInteger {
+    param($Value, [string]$Name, [int]$Minimum, [int]$Maximum)
+    $number = 0
+    if (-not [int]::TryParse([string]$Value, [ref]$number) -or $number -lt $Minimum -or $number -gt $Maximum) {
+        throw ("{0} must be a whole number between {1} and {2}." -f $Name, $Minimum, $Maximum)
+    }
+    return $number
+}
+
+function Invoke-VBoxManage {
+    param([string[]]$Arguments)
+    $output = & $script:VmVBoxManagePath @Arguments 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw ("VBoxManage {0} failed with exit code {1}: {2}" -f ($Arguments -join " "), $exitCode, ($output -join " "))
+    }
+    return $output
+}
+
+function Get-VMState {
+    $output = Invoke-VBoxManage -Arguments @("showvminfo", $script:VmName, "--machinereadable")
+    foreach ($line in $output) {
+        if ([string]$line -match '^VMState="([^"]+)"') {
+            return $Matches[1]
+        }
+    }
+    throw ("Could not determine the state of VirtualBox VM '{0}'." -f $script:VmName)
+}
+
+function Test-VMGuestControl {
+    try {
+        Invoke-VBoxManage -Arguments @(
+            "--nologo", "guestcontrol", $script:VmName, "run",
+            "--exe", "/usr/bin/true",
+            "--username", $script:VmGuestUser,
+            "--passwordfile", $script:VmGuestPasswordFile,
+            "--wait-stdout", "--wait-stderr",
+            "--timeout", "5000"
+        ) | Out-Null
+        return $true
+    }
+    catch {
+        $script:VmGuestControlLastError = $_.Exception.Message
+        return $false
+    }
+}
 
 function Write-Status {
     param(
@@ -156,10 +234,15 @@ function Get-ServiceHealth {
                 if ([int]$response.StatusCode -eq 200) { return "READY" }
                 return "RESPONDING"
             }
+            "virtualbox" {
+                if ((Get-VMState) -eq "running") { return "READY" }
+                return "FAILED"
+            }
         }
     }
     catch {
         if ($Service.HealthKind -eq "evidence") { return "PREPARING" }
+        if ($Service.HealthKind -eq "virtualbox") { return "FAILED" }
         return "STARTING"
     }
     return "STARTING"
@@ -255,9 +338,10 @@ function Get-CorpusName {
 }
 
 function Stop-ManagedProcesses {
-    if ($script:ManagedProcesses.Count -eq 0) { return }
-    Write-Host ""
-    Write-Status "STOPPING" "Stopping processes started by this controller..." Yellow
+    if ($script:ManagedProcesses.Count -gt 0) {
+        Write-Host ""
+        Write-Status "STOPPING" "Stopping processes started by this controller..." Yellow
+    }
 
     foreach ($name in @("Alice", "Inference", "Memory", "Evidence")) {
         foreach ($entry in $script:ManagedProcesses | Where-Object { $_.Name -eq $name }) {
@@ -271,6 +355,32 @@ function Stop-ManagedProcesses {
             catch {
                 Write-Status "WARNING" ("Could not stop {0} process ID {1}: {2}" -f $entry.Name, $entry.Process.Id, $_.Exception.Message) Yellow
             }
+        }
+    }
+
+    if ($script:VmEnabled -and $script:VmStartedByController -and $script:VmShutdownOnExit) {
+        try {
+            $state = Get-VMState
+            if ($state -eq "running") {
+                Write-Status "STOPPING" ("Requesting graceful shutdown of VM '{0}'..." -f $script:VmName) Yellow
+                Invoke-VBoxManage -Arguments @("controlvm", $script:VmName, "acpipowerbutton") | Out-Null
+                $deadline = (Get-Date).AddSeconds(30)
+                do {
+                    Start-Sleep -Seconds 2
+                    $state = Get-VMState
+                    if ($state -eq "poweroff") { break }
+                } while ((Get-Date) -lt $deadline)
+
+                if ($state -eq "poweroff") {
+                    Write-Status "STOPPED" ("VM '{0}' shut down gracefully." -f $script:VmName) Gray
+                }
+                else {
+                    Write-Status "WARNING" ("VM '{0}' is still in state '{1}'. It was left running rather than being forcibly powered off." -f $script:VmName, $state) Yellow
+                }
+            }
+        }
+        catch {
+            Write-Status "WARNING" ("Could not shut down VM '{0}': {1}" -f $script:VmName, $_.Exception.Message) Yellow
         }
     }
 }
@@ -291,6 +401,60 @@ try {
     }
 
     New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
+
+    $vmConfigPath = Join-Path $PSScriptRoot "vm-config.psd1"
+    if (Test-Path -LiteralPath $vmConfigPath -PathType Leaf) {
+        $script:VmConfig = Import-PowerShellDataFile -LiteralPath $vmConfigPath
+        Write-Status "OK" ("Loaded local VM configuration: {0}" -f $vmConfigPath) Green
+    }
+
+    $script:VmEnabled = (Get-VMSetting "ALICE_VM_ENABLED" $false)
+    $script:VmName = [string](Get-VMSetting "ALICE_VM_NAME" "AliceDebian")
+    $script:VmGuestUser = [string](Get-VMSetting "ALICE_VM_GUEST_USER" "alice-exec")
+    $script:VmGuestPasswordFile = [string](Get-VMSetting "ALICE_VM_GUEST_PASSWORD_FILE" "")
+    $script:VmVBoxManagePath = [string](Get-VMSetting "ALICE_VM_VBOXMANAGE_PATH" "")
+    $script:VmStartOnLaunch = (Get-VMSetting "ALICE_VM_START_ON_LAUNCH" $true) 
+    $script:VmShutdownOnExit = (Get-VMSetting "ALICE_VM_SHUTDOWN_ON_EXIT" $true) 
+    $vmTimeout = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_TIMEOUT_SECONDS" 30) "ALICE_VM_TIMEOUT_SECONDS" 1 600
+    $vmMaxTimeout = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_MAX_TIMEOUT_SECONDS" 120) "ALICE_VM_MAX_TIMEOUT_SECONDS" 1 600
+    $vmMaxOutput = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_MAX_OUTPUT_BYTES" 8192) "ALICE_VM_MAX_OUTPUT_BYTES" 1024 262144
+    if ($vmTimeout -gt $vmMaxTimeout) {
+        throw "ALICE_VM_TIMEOUT_SECONDS cannot exceed ALICE_VM_MAX_TIMEOUT_SECONDS."
+    }
+
+    $env:ALICE_VM_ENABLED = if ($script:VmEnabled) { "true" } else { "false" }
+    $env:ALICE_VM_NAME = $script:VmName
+    $env:ALICE_VM_GUEST_USER = $script:VmGuestUser
+    $env:ALICE_VM_GUEST_PASSWORD_FILE = $script:VmGuestPasswordFile
+    $env:ALICE_VM_TIMEOUT_SECONDS = [string]$vmTimeout
+    $env:ALICE_VM_MAX_TIMEOUT_SECONDS = [string]$vmMaxTimeout
+    $env:ALICE_VM_MAX_OUTPUT_BYTES = [string]$vmMaxOutput
+
+    if ($script:VmEnabled) {
+        if ([string]::IsNullOrWhiteSpace($script:VmVBoxManagePath)) {
+            $script:VmVBoxManagePath = Get-ApplicationPath "VBoxManage.exe"
+            if (-not $script:VmVBoxManagePath) { $script:VmVBoxManagePath = Get-ApplicationPath "VBoxManage" }
+        }
+        if (-not $script:VmVBoxManagePath) {
+            throw "VM execution is enabled, but VBoxManage was not found. Set ALICE_VM_VBOXMANAGE_PATH."
+        }
+        if ([string]::IsNullOrWhiteSpace($script:VmName)) {
+            throw "ALICE_VM_NAME must name the configured VirtualBox VM."
+        }
+        if ([string]::IsNullOrWhiteSpace($script:VmGuestUser)) {
+            throw "ALICE_VM_GUEST_USER must name the unprivileged guest account."
+        }
+        if ([string]::IsNullOrWhiteSpace($script:VmGuestPasswordFile) -or
+            -not (Test-Path -LiteralPath $script:VmGuestPasswordFile -PathType Leaf)) {
+            throw "ALICE_VM_GUEST_PASSWORD_FILE must point to a host-side file containing the guest account password."
+        }
+        $env:ALICE_VM_VBOXMANAGE_PATH = $script:VmVBoxManagePath
+        Write-Status "OK" ("VM execution configured: {0} as {1}" -f $script:VmName, $script:VmGuestUser) Green
+    }
+    else {
+        $env:ALICE_VM_VBOXMANAGE_PATH = $script:VmVBoxManagePath
+        Write-Status "SKIPPED" "VM execution is disabled; Alice's other tools are unaffected." Gray
+    }
 
     # Deliberately simple PATH checks for Lua and Luvit.
     $luaPath = Get-ApplicationPath "lua"
@@ -360,6 +524,63 @@ try {
     }
 
     Write-Status "OK" "Prerequisite and port checks completed." Green
+
+    $vmService = $null
+    if ($script:VmEnabled) {
+        $vmState = Get-VMState
+        if ($vmState -ne "running") {
+            if (-not $script:VmStartOnLaunch) {
+                throw ("VM '{0}' is not running (state: {1}) and ALICE_VM_START_ON_LAUNCH is false." -f $script:VmName, $vmState)
+            }
+
+            Write-Status "STARTING" ("Starting VirtualBox VM '{0}' headlessly..." -f $script:VmName) Cyan
+            Invoke-VBoxManage -Arguments @("startvm", $script:VmName, "--type", "headless") | Out-Null
+            $script:VmStartedByController = $true
+
+            $deadline = (Get-Date).AddSeconds(90)
+            do {
+                Start-Sleep -Seconds 2
+                $vmState = Get-VMState
+                if ($vmState -eq "running") { break }
+            } while ((Get-Date) -lt $deadline)
+
+            if ($vmState -ne "running") {
+                throw ("VirtualBox VM '{0}' did not reach running state within 90 seconds (state: {1})." -f $script:VmName, $vmState)
+            }
+        }
+        else {
+            Write-Status "OK" ("VirtualBox VM '{0}' is already running; controller will not shut it down on exit." -f $script:VmName) Green
+        }
+
+        Write-Status "WAIT" "Waiting for VirtualBox Guest Additions and guest credentials to become ready..." Yellow
+        $guestControlReady = $false
+        $guestControlDeadline = (Get-Date).AddSeconds(90)
+        do {
+            if (Test-VMGuestControl) {
+                $guestControlReady = $true
+                break
+            }
+            Start-Sleep -Seconds 3
+        } while ((Get-Date) -lt $guestControlDeadline)
+
+        if (-not $guestControlReady) {
+            throw ("VM '{0}' is running, but Guest Additions guest execution or the configured guest credentials are not ready. Last error: {1}" -f $script:VmName, $script:VmGuestControlLastError)
+        }
+        Write-Status "READY" ("VirtualBox Guest Additions are accepting guest commands for '{0}'." -f $script:VmGuestUser) Green
+
+        $vmService = [pscustomobject]@{
+            Name = "VM"
+            Process = $null
+            Arguments = "VBoxManage showvminfo $($script:VmName) --machinereadable"
+            Stdout = $null
+            Stderr = $null
+            Status = "STARTING"
+            HealthUri = $null
+            HealthKind = "virtualbox"
+        }
+        Write-Status "OK" ("VirtualBox VM '{0}' is running." -f $script:VmName) Green
+    }
+
     Write-Host ""
 
     # --prep runs before the Rust API binds its port. Never wait for it here.
@@ -412,6 +633,7 @@ try {
 
     $script:Services = @($memoryService, $inferenceService, $aliceService)
     if (-not $skipEvidence) { $script:Services += $evidenceService }
+    if ($null -ne $vmService) { $script:Services += $vmService }
 
     Write-Host ""
     Write-Host "Services launched; readiness is monitored independently." -ForegroundColor Cyan
@@ -423,9 +645,11 @@ try {
 
     while ($true) {
         foreach ($service in $script:Services) {
-            $service.Process.Refresh()
+            if ($service.HealthKind -ne "virtualbox") {
+                $service.Process.Refresh()
+            }
 
-            if ($service.Process.HasExited) {
+            if ($service.HealthKind -ne "virtualbox" -and $service.Process.HasExited) {
                 if ($service.Status -ne "FAILED") {
                     $service.Status = "FAILED"
                     $exitCode = "unknown"
@@ -460,6 +684,7 @@ try {
                         }
                     }
                     "RESPONDING" { Write-Status "WAIT" ("{0} is responding but has not reported ready." -f $service.Name) Yellow }
+                    "FAILED" { Write-Status "FAILED" ("{0} is no longer available." -f $service.Name) Red }
                 }
             }
         }

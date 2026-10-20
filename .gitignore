@@ -13,3 +13,4 @@ LICENSE-LLVM-OpenMP
 __pycache__
 .luarocks
 /logs/
+/controller/vm-config.psd1

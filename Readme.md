@@ -28,14 +28,14 @@ Luvit web_server.lua :8080
   |
   v
 Alice Lua middleware
-  |-----------------------|
-  |           |           |
-  v           v           v
-llm_client  Memory tools  Local evidence tools
-  |           |           |
-  v           v           v
-llama.cpp   Python        Rust Data Engine
-:50006      memory        :60005
+  |-----------------------|--------------------|
+  |           |           |                    |
+  v           v           v                    v
+llm_client  Memory tools  Local evidence tools VM execution
+  |           |           |                    |
+  v           v           v                    v
+llama.cpp   Python        Rust Data Engine    VirtualBox guest
+:50006      memory        :60005              Debian/Linux
              service
              :8090
                |
@@ -47,6 +47,7 @@ llama.cpp   Python        Rust Data Engine
 - **llama.cpp** runs local model inference through its OpenAI-compatible chat-completions API. Alice uses the vendored `lua-llama-interface` boundary.
 - **The Python memory service** provides local HTTP access to ChromaDB. Semantic memory is separate from conversation history.
 - **The Rust Data Engine** prepares and searches a selected local corpus and returns bounded evidence.
+- **VM execution** uses the Windows-side `VBoxManage guestcontrol` command to run bounded shell scripts inside a configured Linux guest. Alice does not use SSH for execution; SSH remains available for manual administration.
 - **Web search** uses a provider boundary with DuckDuckGo HTML and Mojeek fallback. Provider failure is distinguished from a successful search with no results.
 
 Services bind to loopback by default. This is a local runtime, not a claim that the application is hardened for exposure to an untrusted network.
@@ -71,6 +72,7 @@ AliceWebAI/
 ├── hn_top_news.lua            # Hacker News top-story API tool
 ├── local_weather.lua          # Open-Meteo current weather and forecast
 ├── dream_tools.lua            # Bounded dream sessions and saved summaries
+├── vm_execution.lua            # Synchronous VirtualBox Linux guest execution
 ├── evidence_hunt.lua         # Search for relevant records
 ├── evidence_gather.lua       # Retrieve bounded evidence
 ├── web_search.lua            # Web-search provider boundary
@@ -122,7 +124,9 @@ No Ollama installation is required.
 
 5. To enable local evidence, build `dataset-stream-parser-api.exe` from the companion repository and place it in `bin\`. Put an XML/XML.BZ2 corpus file or a subdirectory of text files in `corpus\`. The controller can also run without local evidence.
 
-6. From the repository root, start Alice:
+6. To enable VM execution, install Debian 13 minimal in VirtualBox, install VirtualBox Guest Additions in the guest, and create the unprivileged guest account used for execution. Copy `controller\vm-config.psd1.example` to `controller\vm-config.psd1`, configure the VM name, guest username, password-file path, and set `ALICE_VM_ENABLED` to `$true`. The password file should contain the guest account password on the host and live outside the repository with access restricted to the account running Alice. The local configuration file is ignored by Git. Environment variables with the same names override file values.
+
+7. From the repository root, start Alice:
 
    ```powershell
    .\controller\start.ps1
@@ -133,6 +137,8 @@ The controller checks prerequisites and port conflicts, selects the model and op
 Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) when Alice reports ready.
 
 The controller selects one corpus per run. For multiple corpus candidates, it asks which one to load. Corpus preparation may take a while; the evidence API becomes ready when preparation finishes, independently of the other services.
+
+When VM execution is enabled, the controller starts the configured VM headlessly if it is not already running, monitors its state alongside the other services, and requests a graceful guest shutdown on controller exit if the controller started it. The execution adapter requires working VirtualBox Guest Additions and a host-side password file accepted by `VBoxManage guestcontrol`. The guest command timeout is bounded, and stdout/stderr are each capped at 8 KiB by default to avoid overwhelming the model context. Environment variables override the local PowerShell data file, which overrides documented defaults. The VM can be configured to use a host-only adapter for manual SSH administration; Alice itself executes through Guest Additions and does not need SSH access.
 
 ### Local endpoints
 
@@ -159,6 +165,7 @@ The available tools include:
 - `task_manager` — execute up to eight existing tools sequentially and return each result or structured failure; later calls continue after a failure.
 - `hn_top_news` — retrieve up to five current top stories from the official Hacker News API, including article and discussion URLs.
 - `local_weather` — retrieve current conditions and a 1–7 day forecast from Open-Meteo for a named location, with Fahrenheit or Celsius temperatures.
+- `vm_execute` — execute a bounded shell command or multi-line shell script inside the configured Debian/Linux VirtualBox guest, returning the guest exit code, stdout, stderr, and elapsed time. The command runs as the configured guest account, not on the Windows host.
 - `dream_trigger` — run a bounded topic-driven exploration session. The initial and every-fifth-turn memory searches reinforce the subject; permitted read-only research tools are available during the dream. The default budget is 16 turns, with a hard maximum of 32, and checkpoint summaries default to every 8 turns. The transcript and actual tool results are saved under `dreams/` as JSON.
 - `dream_summary` — retrieve a dream's final summary and checkpoints by its returned `dream_id`; optionally include the recorded transcript and tool events.
 
