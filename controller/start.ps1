@@ -408,13 +408,13 @@ try {
         Write-Status "OK" ("Loaded local VM configuration: {0}" -f $vmConfigPath) Green
     }
 
-    $script:VmEnabled = ConvertTo-VMBoolean (Get-VMSetting "ALICE_VM_ENABLED" $false) "ALICE_VM_ENABLED"
+    $script:VmEnabled = (Get-VMSetting "ALICE_VM_ENABLED" $false)
     $script:VmName = [string](Get-VMSetting "ALICE_VM_NAME" "AliceDebian")
     $script:VmGuestUser = [string](Get-VMSetting "ALICE_VM_GUEST_USER" "alice-exec")
     $script:VmGuestPasswordFile = [string](Get-VMSetting "ALICE_VM_GUEST_PASSWORD_FILE" "")
     $script:VmVBoxManagePath = [string](Get-VMSetting "ALICE_VM_VBOXMANAGE_PATH" "")
-    $script:VmStartOnLaunch = ConvertTo-VMBoolean (Get-VMSetting "ALICE_VM_START_ON_LAUNCH" $true) "ALICE_VM_START_ON_LAUNCH"
-    $script:VmShutdownOnExit = ConvertTo-VMBoolean (Get-VMSetting "ALICE_VM_SHUTDOWN_ON_EXIT" $true) "ALICE_VM_SHUTDOWN_ON_EXIT"
+    $script:VmStartOnLaunch = (Get-VMSetting "ALICE_VM_START_ON_LAUNCH" $true) 
+    $script:VmShutdownOnExit = (Get-VMSetting "ALICE_VM_SHUTDOWN_ON_EXIT" $true) 
     $vmTimeout = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_TIMEOUT_SECONDS" 30) "ALICE_VM_TIMEOUT_SECONDS" 1 600
     $vmMaxTimeout = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_MAX_TIMEOUT_SECONDS" 120) "ALICE_VM_MAX_TIMEOUT_SECONDS" 1 600
     $vmMaxOutput = ConvertTo-VMInteger (Get-VMSetting "ALICE_VM_MAX_OUTPUT_BYTES" 8192) "ALICE_VM_MAX_OUTPUT_BYTES" 1024 262144
