@@ -211,6 +211,20 @@ function M.inspect(response, metadata)
     }
 end
 
+-- Return the assistant content intended for conversation history/model context.
+-- Human-facing provenance is appended by decorate() and must not be fed
+-- back to the model as though it were part of the assistant's own reply.
+function M.model_content(response)
+    local text = tostring(response or "")
+    local footer_start = text:find("\n\n--- Tool execution ---", 1, true)
+
+    if footer_start then
+        return text:sub(1, footer_start - 1)
+    end
+
+    return text
+end
+
 function M.decorate(response, metadata)
     metadata = metadata or {}
 

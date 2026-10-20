@@ -67,9 +67,26 @@ VMExecution.definition
 
 local Alice = {}
 
-local HISTORY_FILE = "conversation_history.json"
+local HISTORY_FILE = os.getenv("ALICE_CONVERSATION_HISTORY_FILE") or "conversation_history.json"
+local ARCHIVE_FILE = os.getenv("ALICE_HISTORY_ARCHIVE_FILE") or "C:\\data\\AliceConversationHistory\\data.json"
 local MAX_HISTORY_MESSAGES = 128
 local LLM_HISTORY_MESSAGES = 4
+
+-- Message IDs are generated once and persisted with each message. The counter
+-- and process-time component reduce collision risk without adding dependencies.
+local message_sequence = 0
+math.randomseed(os.time() + math.floor((os.clock() or 0) * 1000000))
+
+local function new_message_id()
+    message_sequence = message_sequence + 1
+    return string.format(
+        "alice-%d-%d-%d-%06d",
+        os.time(),
+        math.floor((os.clock() or 0) * 1000000),
+        message_sequence,
+        math.random(0, 999999)
+    )
+end
 
 local base_system_prompt = [[
 You are an average twenty first century digital assistant.
@@ -98,7 +115,8 @@ in conversation history.
 
 Use tools only when the current request calls for them. Do not continue,
 retry, resume, or expand a previous tool operation unless the current
-request explicitly asks you to do so.
+request explicitly asks you to do so. Do not write a preamble when tool
+operation is requested.
 
 A failed, incomplete, or tool-limited request is still a completed request
 once Alice has returned its failure to the human. Its failure does not
@@ -165,7 +183,36 @@ return false
 
 end
 
-local function load_conversation_history(path)
+local function recover_history_file(path)
+    local backup_path = path .. ".bak"
+
+    if file_exists(path) then
+        -- Leave any backup untouched until a later successful save. The
+        -- current file may exist but be malformed, and the backup may be the
+        -- only recoverable copy.
+        return true
+    end
+
+    if file_exists(backup_path) then
+        local restored, restore_error = os.rename(backup_path, path)
+        if not restored then
+            return nil,
+                "Unable to recover history backup '" ..
+                backup_path .. "': " .. tostring(restore_error)
+        end
+
+        log("WARN", "Recovered history file from backup: " .. path)
+    end
+
+    return true
+end
+
+local function load_conversation_history(path, is_archive)
+local recovered, recovery_error = recover_history_file(path)
+if not recovered then
+    return nil, recovery_error
+end
+
 if not file_exists(path) then
 return {}
 end
@@ -206,6 +253,60 @@ end
 if type(data) ~= "table" then
     return nil,
         "History JSON must contain an array"
+end
+
+local record_count = 0
+for key, _ in pairs(data) do
+    if type(key) ~= "number"
+       or key < 1
+       or key % 1 ~= 0 then
+        return nil, "History JSON must contain an array"
+    end
+    record_count = record_count + 1
+end
+
+for index = 1, record_count do
+    if data[index] == nil then
+        return nil, "History JSON array contains a missing record"
+    end
+end
+
+-- Older active-history records have no IDs. Give them IDs for future saves,
+-- but explicitly exclude them from the new archive. Existing IDs identify
+-- messages created by this implementation and make interrupted archive saves
+-- recoverable after restart.
+for _, message in ipairs(data) do
+    if type(message) ~= "table" then
+        return nil, "History entries must be JSON objects"
+    end
+
+    local has_id =
+        type(message.id) == "string"
+        and message.id ~= ""
+
+    if not has_id then
+        message.id = new_message_id()
+
+        if not is_archive then
+            message.archive_eligible = false
+        end
+    elseif not is_archive and message.archive_eligible == nil then
+        message.archive_eligible = true
+    end
+
+    -- Migrate older history entries that stored the decorated human-facing
+    -- reply as assistant content. Preserve the transcript for display while
+    -- keeping only the model-authored reply in content.
+    if message.role == "assistant"
+       and type(message.content) == "string"
+       and type(message.display_content) ~= "string" then
+        local model_content = ResponsePolicy.model_content(message.content)
+
+        if model_content ~= message.content then
+            message.display_content = message.content
+            message.content = model_content
+        end
+    end
 end
 
 return data
@@ -272,18 +373,27 @@ if not close_ok then
         tostring(close_error)
 end
 
+local backup_path = path .. ".bak"
+
 if file_exists(path) then
-    local remove_ok, remove_error =
-        os.remove(path)
+    if file_exists(backup_path) then
+        local remove_backup_ok, remove_backup_error =
+            os.remove(backup_path)
 
-    if not remove_ok then
+        if not remove_backup_ok then
+            os.remove(temporary_path)
+            return nil,
+                "Unable to remove stale history backup '" ..
+                backup_path .. "': " .. tostring(remove_backup_error)
+        end
+    end
+
+    local backup_ok, backup_error = os.rename(path, backup_path)
+    if not backup_ok then
         os.remove(temporary_path)
-
         return nil,
-            "Unable to remove existing history file '" ..
-            path ..
-            "': " ..
-            tostring(remove_error)
+            "Unable to preserve existing history file '" ..
+            path .. "': " .. tostring(backup_error)
     end
 end
 
@@ -291,6 +401,16 @@ local rename_ok, rename_error =
     os.rename(temporary_path, path)
 
 if not rename_ok then
+    if file_exists(backup_path) and not file_exists(path) then
+        local restore_ok, restore_error = os.rename(backup_path, path)
+        if not restore_ok then
+            rename_error =
+                tostring(rename_error) ..
+                "; backup restoration also failed: " ..
+                tostring(restore_error)
+        end
+    end
+
     os.remove(temporary_path)
 
     return nil,
@@ -298,6 +418,19 @@ if not rename_ok then
         path ..
         "': " ..
         tostring(rename_error)
+end
+
+if file_exists(backup_path) then
+    local remove_backup_ok, remove_backup_error =
+        os.remove(backup_path)
+
+    if not remove_backup_ok then
+        log(
+            "WARN",
+            "History saved, but backup cleanup failed for '" ..
+            backup_path .. "': " .. tostring(remove_backup_error)
+        )
+    end
 end
 
 return true
@@ -310,6 +443,29 @@ local override_stack = {}
 
 local loaded_history, history_error =
 load_conversation_history(HISTORY_FILE)
+
+local loaded_archive, archive_error =
+load_conversation_history(ARCHIVE_FILE, true)
+
+local conversation_archive = loaded_archive or {}
+local archive_available = loaded_archive ~= nil
+
+if archive_available then
+    log(
+        "INFO",
+        string.format(
+            "Loaded %d archived messages from %s",
+            #conversation_archive,
+            ARCHIVE_FILE
+        )
+    )
+else
+    log(
+        "ERROR",
+        "Conversation archive is unavailable; preserving it and disabling archive writes: " ..
+        tostring(archive_error)
+    )
+end
 
 local function message_count()
 local count = 0
@@ -364,24 +520,93 @@ end
 
 end
 
-local function save_history()
-trim_history()
+local function archive_copy(message)
+    local record = {}
 
+    for key, value in pairs(message) do
+        if key ~= "archive_eligible" then
+            record[key] = value
+        end
+    end
 
-local saved, err =
-    save_conversation_history(
-        HISTORY_FILE,
-        conversation_history
-    )
-
-if not saved then
-    log("ERROR", err)
-    return false
+    return record
 end
 
-return true
+local function reconcile_archive()
+    if not archive_available then
+        return nil, "Conversation archive is unavailable"
+    end
 
+    local known_ids = {}
+    for _, record in ipairs(conversation_archive) do
+        if type(record.id) == "string" and record.id ~= "" then
+            known_ids[record.id] = true
+        end
+    end
 
+    for _, message in ipairs(conversation_history) do
+        if message.archive_eligible ~= false
+           and type(message.id) == "string"
+           and message.id ~= ""
+           and not known_ids[message.id] then
+            table.insert(
+                conversation_archive,
+                archive_copy(message)
+            )
+            known_ids[message.id] = true
+        end
+    end
+
+    return true
+end
+
+local function save_history()
+    trim_history()
+
+    -- Save the archive first. If active-history persistence then fails, the
+    -- durable archive still contains the new message. If the archive write
+    -- fails, the active history retains eligible IDs so startup can reconcile
+    -- those messages into the archive on the next run.
+    local archive_saved = false
+
+    if archive_available then
+        local reconciled, reconcile_error = reconcile_archive()
+
+        if not reconciled then
+            log("ERROR", tostring(reconcile_error))
+        else
+            local archive_ok, archive_save_error =
+                save_conversation_history(
+                    ARCHIVE_FILE,
+                    conversation_archive
+                )
+
+            if archive_ok then
+                archive_saved = true
+            else
+                log("ERROR", archive_save_error)
+            end
+        end
+    end
+
+    local history_saved, history_save_error =
+        save_conversation_history(
+            HISTORY_FILE,
+            conversation_history
+        )
+
+    if not history_saved then
+        log("ERROR", history_save_error)
+    end
+
+    return history_saved and archive_saved
+end
+
+-- Persist IDs assigned to legacy active-history entries. Those entries remain
+-- excluded from the archive; the archive begins with messages created after
+-- this implementation is deployed.
+if loaded_history then
+    save_history()
 end
 
 local function add_message(
@@ -390,11 +615,10 @@ content,
 extra_fields
 )
 local message = {
-role = role,
-content = content,
-timestamp = os.time()
+    role = role,
+    content = content,
+    timestamp = os.time()
 }
-
 
 if extra_fields then
     for key, value in pairs(extra_fields) do
@@ -402,23 +626,35 @@ if extra_fields then
     end
 end
 
+if type(message.id) ~= "string" or message.id == "" then
+    message.id = new_message_id()
+end
+
+-- Newly created messages are eligible for archival. Legacy messages loaded
+-- from the previous active history are explicitly marked archive_eligible=false.
+message.archive_eligible = true
+
 table.insert(
     conversation_history,
     message
 )
 
 trim_history()
-
-
 end
 
 local function replace_history(new_history)
 for i = #conversation_history, 1, -1 do
-conversation_history[i] = nil
+    conversation_history[i] = nil
 end
 
-
 for _, message in ipairs(new_history or {}) do
+    -- Histories loaded from disk already carry an ID and archival eligibility
+    -- decision. Do not treat this replacement operation as message creation.
+    if type(message.id) ~= "string" or message.id == "" then
+        message.id = new_message_id()
+        message.archive_eligible = false
+    end
+
     table.insert(
         conversation_history,
         message
@@ -426,8 +662,6 @@ for _, message in ipairs(new_history or {}) do
 end
 
 trim_history()
-
-
 end
 
 local function recent_history()
@@ -778,7 +1012,7 @@ local output = {}
                 i,
                 role,
                 handler_note,
-                tostring(msg.content or "")
+                tostring(msg.display_content or msg.content or "")
             )
     end
 
@@ -794,7 +1028,9 @@ if cmd == "/history-save" then
     if save_history() then
         return command_result(
             "Conversation history saved to " ..
-            HISTORY_FILE
+            HISTORY_FILE ..
+            " and archive saved to " ..
+            ARCHIVE_FILE
         )
     end
 
@@ -832,7 +1068,7 @@ if cmd == "/history-clear" then
 
     if save_history() then
         return command_result(
-            "History and overrides cleared"
+            "Active history and overrides cleared; archived history retained"
         )
     end
 
@@ -968,7 +1204,7 @@ add_message(
 if not save_history() then
     log(
         "WARN",
-        "User message is retained in memory only"
+        "User message could not be saved to both history stores; see logs for details"
     )
 end
 
@@ -1064,8 +1300,12 @@ LLMClient.call(
 
         add_message(
             "assistant",
-            final_response,
+            response,
             {
+                -- Keep the model-authored response separate from the decorated
+                -- version returned to the human and shown in transcript views.
+                display_content = final_response,
+
                 user_id =
                     identity and
                     (identity.id or identity.user_id)
@@ -1086,7 +1326,7 @@ LLMClient.call(
         if not save_history() then
             log(
                 "WARN",
-                "Assistant response is retained in memory only"
+                "Assistant response could not be saved to both history stores; see logs for details"
             )
         end
 
@@ -1136,6 +1376,13 @@ role,
 content,
 extra_fields
 )
+
+if not save_history() then
+    log(
+        "WARN",
+        "Public Alice.add_message could not persist both history stores"
+    )
+end
 end
 
 function Alice.get_overrides()
