@@ -8,7 +8,9 @@ local entries = {}
 local ordered_names = {}
 local initialized = false
 
-local unloadable_names = {
+-- These tools must remain available and cannot be unloaded.
+local protected_from_unload = {
+    discover_tool = true,
     memory_search = true,
     memory_store = true,
     vm_execute = true,
@@ -137,8 +139,8 @@ function M.unload(tool_name)
         return nil, "Unknown tool: " .. tostring(tool_name)
     end
 
-    if not unloadable_names[tool_name] then
-        return nil, "Tool cannot be unloaded: " .. tool_name
+    if protected_from_unload[tool_name] then
+        return nil, "Tool is protected from unloading: " .. tool_name
     end
 
     local changed = entry.loaded
