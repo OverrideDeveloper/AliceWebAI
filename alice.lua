@@ -185,8 +185,7 @@ current request.
 
 --- DYNAMIC TOOL DISCOVERY ---
 
-The model receives definitions only for tools that are currently loaded. A tool
-missing from the current tool definitions may still be registered and available
+A tool missing from the current tool definitions may still be registered and available
 to load. The loaded tools are a starting toolkit, not a list of all available
 capabilities.
 
@@ -204,11 +203,7 @@ discover_tool to find and enable the relevant registered tool:
    when its definition is supplied to you.
 
 Discovery and inspection alone do not make an unloaded tool callable. Loading it
-is the required step. If a tool call reports that the tool is not loaded, inspect
-the catalogue if needed, load that tool, and retry the call when appropriate.
-Only report that a capability is unavailable if the needed tool is not registered
-or loading/execution fails. Only memory_search, memory_store, and vm_execute may
-be unloaded.
+is the required step. 
 
 --- END DYNAMIC TOOL DISCOVERY ---
 ]]
