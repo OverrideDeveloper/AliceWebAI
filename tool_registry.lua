@@ -61,6 +61,10 @@ function M.initialize(definitions, synopses, initially_loaded)
     return true
 end
 
+function M.is_initialized()
+    return initialized
+end
+
 function M.get(tool_name)
     return entries[tool_name]
 end
