@@ -15,9 +15,10 @@ M.definition = {
             .. "available among the currently loaded tool definitions. An absent definition "
             .. "does not mean the capability is unavailable. First use mode All to list "
             .. "registered tool names, synopses, and loaded states. If needed, use mode "
-            .. "tool_name with the exact name to inspect its full definition. Then use "
-            .. "mode load_tool with the exact tool_name. After loading succeeds, the tool "
-            .. "definition is supplied on the next inference round and you can call it. "
+            .. "tool_name with the exact name to inspect its full definition. Use mode "
+            .. "load_tool with tool_names to load several registered tools in one operation, "
+            .. "or tool_name to load one tool. After loading, the result includes the updated "
+            .. "registry and each tool definition is supplied on the next inference round. "
             .. "Discovery or inspection alone does not load a tool. Use mode unload_tool "
             .. "only for a permitted unloadable tool.",
         parameters = {
@@ -32,13 +33,44 @@ M.definition = {
                 tool_name = {
                     type = "string",
                     description =
-                        "Required for tool_name, load_tool, and unload_tool; the exact registered tool name.",
+                        "Exact registered tool name for tool_name, load_tool, or unload_tool. "
+                        .. "For load_tool, use tool_names to load multiple tools at once.",
+                },
+                tool_names = {
+                    type = "array",
+                    items = {type = "string"},
+                    description =
+                        "One or more exact registered tool names to load in a single load_tool operation.",
                 },
             },
             required = {"mode"},
         },
     },
 }
+
+local function get_requested_names(arguments, mode)
+    if type(arguments.tool_names) == "table" then
+        if #arguments.tool_names == 0 then
+            return nil, "tool_names must contain at least one tool name"
+        end
+
+        local names = {}
+        for index, name in ipairs(arguments.tool_names) do
+            if type(name) ~= "string" or name == "" then
+                return nil, "tool_names entry " .. index .. " must be a non-empty string"
+            end
+            names[#names + 1] = name
+        end
+        return names
+    end
+
+    local name = arguments.tool_name
+    if type(name) ~= "string" or name == "" then
+        return nil, "discover_tool mode " .. mode .. " requires tool_name or tool_names"
+    end
+
+    return {name}
+end
 
 function M.discover(arguments)
     arguments = type(arguments) == "table" and arguments or {}
@@ -76,26 +108,53 @@ function M.discover(arguments)
     end
 
     if mode == "load_tool" then
-        local name = arguments.tool_name
-        if type(name) ~= "string" or name == "" then
+        local names, names_error = get_requested_names(arguments, mode)
+        if not names then
             return nil, {
                 category = "invalid_request",
-                message = "discover_tool mode load_tool requires tool_name",
+                message = names_error,
             }
         end
 
-        local result, err = ToolRegistry.load(name)
-        if not result then
-            return nil, {
-                category = "unknown_tool",
-                message = err,
-            }
+        local results = {}
+        local loaded_count = 0
+        local failed_count = 0
+
+        for _, name in ipairs(names) do
+            local result, err = ToolRegistry.load(name)
+            if result then
+                loaded_count = loaded_count + 1
+                results[#results + 1] = {
+                    tool_name = result.tool_name,
+                    synopsis = result.synopsis,
+                    loaded = result.loaded,
+                    changed = result.changed,
+                }
+            else
+                failed_count = failed_count + 1
+                results[#results + 1] = {
+                    tool_name = name,
+                    loaded = false,
+                    error = err,
+                }
+            end
         end
 
-        result.message = result.changed
-            and ("Loaded tool " .. name .. "; its definition will be available on the next inference round.")
-            or ("Tool " .. name .. " is already loaded.")
-        return result
+        local message = string.format(
+            "Load operation complete: %d loaded or already loaded, %d failed. "
+                .. "The updated registry is included below; newly loaded tool definitions "
+                .. "will be available on the next inference round.",
+            loaded_count,
+            failed_count
+        )
+
+        return {
+            results = results,
+            registry = ToolRegistry.list(),
+            loaded_count = loaded_count,
+            failed_count = failed_count,
+            message = message,
+        }
     end
 
     if mode == "unload_tool" then
