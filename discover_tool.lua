@@ -11,11 +11,15 @@ M.definition = {
     ["function"] = {
         name = "discover_tool",
         description =
-            "Discover registered tools and manage which tool definitions are exposed "
-            .. "to the inference model. Use mode All to list tool names, synopses, and "
-            .. "loaded states; mode tool_name to retrieve a full tool definition; "
-            .. "mode load_tool to load a registered tool; or mode unload_tool to unload "
-            .. "one of the permitted unloadable tools.",
+            "Use this tool whenever a capability needed for the current request is not "
+            .. "available among the currently loaded tool definitions. An absent definition "
+            .. "does not mean the capability is unavailable. First use mode All to list "
+            .. "registered tool names, synopses, and loaded states. If needed, use mode "
+            .. "tool_name with the exact name to inspect its full definition. Then use "
+            .. "mode load_tool with the exact tool_name. After loading succeeds, the tool "
+            .. "definition is supplied on the next inference round and you can call it. "
+            .. "Discovery or inspection alone does not load a tool. Use mode unload_tool "
+            .. "only for a permitted unloadable tool.",
         parameters = {
             type = "object",
             properties = {
