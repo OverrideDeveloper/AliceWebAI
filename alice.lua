@@ -45,6 +45,8 @@ local HNTopNews = require("./hn_top_news")
 local LocalWeather = require("./local_weather")
 local DreamTools = require("./dream_tools")
 local VMExecution = require("./vm_execution")
+local DiscoverTool = require("./discover_tool")
+local ToolRegistry = require("./tool_registry")
 
 local available_tools = {
 MemorySearch.definition,
@@ -62,8 +64,51 @@ HNTopNews.definition,
 LocalWeather.definition,
 DreamTools.trigger_definition,
 DreamTools.summary_definition,
-VMExecution.definition
+VMExecution.definition,
+DiscoverTool.definition
 }
+
+-- Tool definitions are registered once per Luvit process. Only the foundational
+-- tools start loaded; Alice can load additional registered tools as needed.
+local tool_synopses = {
+    memory_search = "Search Alice's stored memories for relevant prior information.",
+    memory_store = "Store useful information in Alice's persistent memory.",
+    current_time = "Get the current local date and time.",
+    dice_roll = "Roll dice using the requested notation.",
+    deck_draw = "Draw cards from a deck.",
+    game_state = "Manage or inspect game state.",
+    web_search = "Search the web for relevant information.",
+    EvidenceHunt = "Find relevant records in the local evidence corpus.",
+    EvidenceGather = "Retrieve and assemble local evidence fragments.",
+    EvidenceCorpus = "Discover the corpus configured in the local Rust Data Engine.",
+    task_manager = "Run a bounded sequence of registered tool calls.",
+    hn_top_news = "Retrieve current top news from Hacker News.",
+    local_weather = "Retrieve local weather information.",
+    dream_trigger = "Start a bounded background-style reasoning dream using its restricted tool set.",
+    dream_summary = "Retrieve a concise summary of a completed dream.",
+    vm_execute = "Execute an approved command in Alice's configured virtual machine.",
+    discover_tool = "List registered tools, inspect a tool schema, or load and unload tools.",
+}
+
+local initially_loaded_tools = {
+    discover_tool = true,
+    memory_search = true,
+    memory_store = true,
+    vm_execute = true,
+    EvidenceCorpus = true,
+    EvidenceHunt = true,
+    EvidenceGather = true,
+}
+
+local registry_initialized, registry_error = ToolRegistry.initialize(
+    available_tools,
+    tool_synopses,
+    initially_loaded_tools
+)
+
+if not registry_initialized then
+    error("Unable to initialize Alice's tool registry: " .. tostring(registry_error))
+end
 
 local Alice = {}
 
