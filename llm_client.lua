@@ -43,6 +43,8 @@ local HNTopNews = require("./hn_top_news")
 local LocalWeather = require("./local_weather")
 local DreamTools = require("./dream_tools")
 local VMExecution = require("./vm_execution")
+local DiscoverTool = require("./discover_tool")
+local ToolRegistry = require("./tool_registry")
 local Evidence = require("./evidence")
 local Observability = require("./observability")
 
@@ -134,6 +136,10 @@ local ToolHandlers = {
     end,
     vm_execute = function(arguments, callback)
         VMExecution.execute(arguments, callback)
+    end,
+    discover_tool = function(arguments, callback)
+        local result, err = DiscoverTool.discover(arguments)
+        callback(result, err)
     end,
 }
 
@@ -311,6 +317,17 @@ local function execute_tool(
     local request_context =
         execution_context and execution_context.request_context
 
+    -- The live registry is authoritative. A definition retained by the model
+    -- from an earlier round cannot authorize a call after its tool is unloaded.
+    if ToolRegistry.is_initialized()
+        and not ToolRegistry.is_loaded(tool_name) then
+        callback(nil, {
+            category = "tool_not_loaded",
+            message = "Tool is not currently loaded: " .. tool_name,
+        })
+        return
+    end
+
     if request_context
         and type(request_context.allowed_tool_names) == "table"
         and request_context.allowed_tool_names[tool_name] ~= true then
@@ -355,6 +372,7 @@ local function execute_tool(
         task_manager = true,
         dream_trigger = true,
         vm_execute = true,
+        discover_tool = true,
     }
 
     if asynchronous_tools[tool_name] then
@@ -844,8 +862,15 @@ local function call_round(
         tool_choice = "auto",
     }
 
-    if tools and #tools > 0 then
-        options.tools = tools
+    -- Rebuild the callable tool surface for every inference round. A discover_tool
+    -- load/unload operation in the previous round therefore affects this round.
+    local round_tools = tools
+    if ToolRegistry.is_initialized() then
+        round_tools = ToolRegistry.filter_loaded(tools)
+    end
+
+    if round_tools and #round_tools > 0 then
+        options.tools = round_tools
     end
 
     if request_context and request_context.inference_timeout ~= nil then
