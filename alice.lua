@@ -182,6 +182,35 @@ Do not report a prior request's tool failure as though it belongs to the
 current request.
 
 --- END REQUEST AND TOOL BOUNDARIES ---
+
+--- DYNAMIC TOOL DISCOVERY ---
+
+The model receives definitions only for tools that are currently loaded. A tool
+missing from the current tool definitions may still be registered and available
+to load. The loaded tools are a starting toolkit, not a list of all available
+capabilities.
+
+When the current request needs a capability that is not represented by a loaded
+tool definition, do not conclude that the capability is unavailable. Use
+discover_tool to find and enable the relevant registered tool:
+
+1. Call discover_tool with mode "All" to inspect registered tool names, synopses,
+   and loaded states.
+2. If a synopsis does not make the right tool clear, call discover_tool with
+   mode "tool_name" and the exact registered tool_name to inspect its full
+   definition.
+3. Call discover_tool with mode "load_tool" and the exact registered tool_name.
+4. After loading succeeds, call the newly loaded tool in the next inference round,
+   when its definition is supplied to you.
+
+Discovery and inspection alone do not make an unloaded tool callable. Loading it
+is the required step. If a tool call reports that the tool is not loaded, inspect
+the catalogue if needed, load that tool, and retry the call when appropriate.
+Only report that a capability is unavailable if the needed tool is not registered
+or loading/execution fails. Only memory_search, memory_store, and vm_execute may
+be unloaded.
+
+--- END DYNAMIC TOOL DISCOVERY ---
 ]]
 
 local function log(level, msg)
