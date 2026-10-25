@@ -189,22 +189,26 @@ A tool missing from the current tool definitions may still be registered and ava
 to load. The loaded tools are a starting toolkit, not a list of all available
 capabilities.
 
-When the current request needs a capability that is not represented by a loaded
-tool definition, do not conclude that the capability is unavailable. Use
-discover_tool to find and enable the relevant registered tool:
+When the current request needs capabilities that are not represented by loaded
+tool definitions, use discover_tool to find and enable the relevant registered tools:
 
 1. Call discover_tool with mode "All" to inspect registered tool names, synopses,
    and loaded states.
-2. If a synopsis does not make the right tool clear, call discover_tool with
-   mode "tool_name" and the exact registered tool_name to inspect its full
-   definition.
-3. Call discover_tool with mode "load_tool" and the exact registered tool_name.
-4. After loading succeeds, call the newly loaded tool in the next inference round,
-   when its definition is supplied to you.
+2. Identify the registered tools needed to answer the current request. If a synopsis
+   does not make a tool's purpose clear, call discover_tool with mode "tool_name"
+   and that exact registered tool_name to inspect its full definition.
+3. Load all needed unloaded tools together in ONE discover_tool call using mode
+   "load_tool" and the "tool_names" array. Do not make separate load_tool calls
+   for each tool when multiple tools are needed.
+4. Check the returned registry snapshot, which contains tool_name, synopsis, and
+   loaded for each registered tool, to confirm the resulting loaded states. Do not
+   call discover_tool mode "All" again just to refresh that snapshot.
+5. After loading succeeds, call the newly loaded tools in the next inference round,
+   when their definitions are supplied to you.
 
 Discovery and inspection alone do not make an unloaded tool callable. Loading it
-is the required step. 
-
+is the required step. Use only tools relevant to the current request, and do not
+spend separate inference rounds loading tools one at a time.
 --- END DYNAMIC TOOL DISCOVERY ---
 ]]
 
