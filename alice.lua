@@ -92,6 +92,7 @@ local tool_synopses = {
 
 local initially_loaded_tools = {
     discover_tool = true,
+    current_time = true,
     memory_search = true,
     memory_store = true,
     vm_execute = true,
