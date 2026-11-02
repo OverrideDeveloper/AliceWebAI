@@ -182,7 +182,9 @@ M.definition = {
             "Search Alice's long-term semantic memory. "
             .. "Use this when information from previous conversations, "
             .. "stored notes, projects, decisions, or other remembered "
-            .. "context may be relevant to the user's request.",
+            .. "context may be relevant to the user's request. "
+            .. "Results are limited to the current user's private memories "
+            .. "plus deliberately shared and Alice system memories.",
 
         parameters = {
             type = "object",
