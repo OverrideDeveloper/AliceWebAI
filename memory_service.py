@@ -158,11 +158,13 @@ class MemoryHandler(BaseHTTPRequestHandler):
                 query = data.get("query", "")
                 count = data.get("count", 5)
                 category = data.get("category")
+                owner_id = data.get("owner_id")
 
                 results = get_memory().search(
                     query=query,
                     count=count,
                     category=category,
+                    owner_id=owner_id,
                 )
 
                 json_response(
@@ -197,16 +199,16 @@ class MemoryHandler(BaseHTTPRequestHandler):
                     {},
                 )
 
-                memory_id = data.get(
-                    "id"
-                )
+                scope = data.get("scope", "user")
+                owner_id = data.get("owner_id")
 
                 result = get_memory().store(
                     content=content,
                     source=source,
                     category=category,
                     metadata=metadata,
-                    memory_id=memory_id,
+                    scope=scope,
+                    owner_id=owner_id,
                 )
 
                 json_response(
