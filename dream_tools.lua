@@ -256,7 +256,7 @@ local function make_child_context(session, turn_number, allowed_tool_names, reco
         provider = "dream",
     })
     context.inference_timeout = parent and parent.inference_timeout or nil
-    context.anonymous = parent and parent.anonymous == false and false or true
+    context.anonymous = not parent or parent.anonymous ~= false
     context.memory_owner_id = parent and parent.memory_owner_id or nil
     context.shared_memory_authorized = false
     context.dream_turn = turn_number
