@@ -620,9 +620,12 @@ async def alice_reset_command(
         ephemeral=True
     )
 
+    identity = get_discord_identity(interaction)
+
     try:
         response = await ask_alice(
-            "/history-clear"
+            "/history-clear",
+            identity=identity,
         )
 
         await interaction.followup.send(
@@ -664,9 +667,12 @@ async def alice_history_command(
         ephemeral=True
     )
 
+    identity = get_discord_identity(interaction)
+
     try:
         response = await ask_alice(
-            "/history"
+            "/history",
+            identity=identity,
         )
 
         chunks = split_discord_message(
