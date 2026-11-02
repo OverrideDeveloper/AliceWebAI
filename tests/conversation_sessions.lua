@@ -1,6 +1,6 @@
 -- Alice Web AI
 -- Regression tests for identity-scoped conversation sessions.
--- Run from the repository root: luajit tests/conversation_sessions.lua
+-- Run from the tests directory: luajit conversation_sessions.lua
 -- Lua 5.1 compatible.
 
 local Sessions = require("../conversation_sessions")
