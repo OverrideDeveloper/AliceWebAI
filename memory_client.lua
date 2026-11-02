@@ -258,6 +258,7 @@ function MemoryClient.search(
     query,
     count,
     category,
+    owner_id,
     callback
 )
     if type(callback) ~= "function" then
@@ -272,6 +273,7 @@ function MemoryClient.search(
             query = query,
             count = count or 5,
             category = category,
+            owner_id = owner_id,
         },
         callback
     )
@@ -281,6 +283,8 @@ function MemoryClient.store(
     content,
     source,
     category,
+    scope,
+    owner_id,
     metadata,
     callback
 )
@@ -296,6 +300,8 @@ function MemoryClient.store(
             content = content,
             source = source or "conversation",
             category = category or "general",
+            scope = scope or "user",
+            owner_id = owner_id,
             metadata = metadata or {},
         },
         callback
