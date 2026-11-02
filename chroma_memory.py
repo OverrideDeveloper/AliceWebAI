@@ -63,6 +63,8 @@ class AliceMemory:
         content: str,
         source: str = "unknown",
         category: str = "general",
+        scope: str = "legacy_unclassified",
+        owner_id: str | None = None,
     ) -> str:
         """
         Generate a deterministic ID.
@@ -72,7 +74,11 @@ class AliceMemory:
         """
 
         raw = (
-            str(source)
+            str(scope)
+            + "\n"
+            + str(owner_id or "")
+            + "\n"
+            + str(source)
             + "\n"
             + str(category)
             + "\n"
@@ -89,7 +95,8 @@ class AliceMemory:
         source: str = "conversation",
         category: str = "general",
         metadata: dict[str, Any] | None = None,
-        memory_id: str | None = None,
+        scope: str = "user",
+        owner_id: str | None = None,
     ) -> dict[str, Any]:
 
         content = str(content).strip()
@@ -97,30 +104,43 @@ class AliceMemory:
         if not content:
             raise ValueError("Memory content cannot be empty")
 
-        memory_id = memory_id or self.make_id(
-            content,
-            source,
-            category,
+        scope = str(scope).strip()
+        if scope not in {"user", "shared", "system"}:
+            raise ValueError("Memory scope must be user, shared, or system")
+
+        if scope == "user":
+            owner_id = str(owner_id or "").strip()
+            if not owner_id:
+                raise ValueError("User-scoped memory requires an owner_id")
+        else:
+            owner_id = None
+
+        memory_id = self.make_id(
+            content, source, category, scope, owner_id
         )
 
-        record_metadata: dict[str, Any] = {
-            "source": str(source),
-            "category": str(category),
-            "stored_at": datetime.now(
-                timezone.utc
-            ).isoformat(),
-        }
-
+        # Descriptive metadata is retained, but cannot override ownership,
+        # scope, category, provenance, or timestamp fields.
+        record_metadata: dict[str, Any] = {}
+        protected = {"scope", "owner_id", "source", "category", "stored_at"}
         if metadata:
             for key, value in metadata.items():
-                if value is None:
+                key = str(key)
+                if key in protected or value is None:
                     continue
-
-                # Chroma metadata values should remain scalar.
                 if isinstance(value, (str, int, float, bool)):
-                    record_metadata[str(key)] = value
+                    record_metadata[key] = value
                 else:
-                    record_metadata[str(key)] = str(value)
+                    record_metadata[key] = str(value)
+
+        record_metadata.update({
+            "source": str(source),
+            "category": str(category),
+            "scope": scope,
+            "stored_at": datetime.now(timezone.utc).isoformat(),
+        })
+        if owner_id is not None:
+            record_metadata["owner_id"] = owner_id
 
         self.collection.upsert(
             ids=[memory_id],
@@ -139,6 +159,7 @@ class AliceMemory:
         query: str,
         count: int = 5,
         category: str | None = None,
+        owner_id: str | None = None,
     ) -> list[dict[str, Any]]:
 
         query = str(query).strip()
@@ -158,10 +179,28 @@ class AliceMemory:
             ],
         }
 
+        visible_scopes: list[dict[str, Any]] = [
+            {"scope": "shared"},
+            {"scope": "system"},
+        ]
+        if owner_id:
+            visible_scopes.append({
+                "$and": [
+                    {"scope": "user"},
+                    {"owner_id": str(owner_id)},
+                ]
+            })
+
+        visibility = {"$or": visible_scopes}
         if category:
             kwargs["where"] = {
-                "category": str(category)
+                "$and": [
+                    visibility,
+                    {"category": str(category)},
+                ]
             }
+        else:
+            kwargs["where"] = visibility
 
         results = self.collection.query(**kwargs)
 
