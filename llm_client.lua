@@ -104,11 +104,11 @@ local ToolHandlers = {
     dream_summary = function(arguments)
         return DreamTools.summary(arguments)
     end,
-    memory_store = function(arguments, callback)
-        MemoryStore.store(arguments, callback, "web")
+    memory_store = function(arguments, callback, execution_context)
+        MemoryStore.store(arguments, callback, "web", execution_context)
     end,
-    memory_search = function(arguments, callback)
-        MemorySearch.search(arguments, callback)
+    memory_search = function(arguments, callback, execution_context)
+        MemorySearch.search(arguments, callback, execution_context)
     end,
     current_time = CurrentTime.current_time,
     dice_roll = DiceRoll.dice_roll,
