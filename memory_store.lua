@@ -64,6 +64,21 @@ function M.store(arguments, callback, source, execution_context)
         return
     end
 
+    local request_context =
+        type(execution_context) == "table"
+        and execution_context.request_context
+        or nil
+
+    if scope == "shared"
+       and (type(request_context) ~= "table"
+            or request_context.shared_memory_authorized ~= true) then
+        callback(
+            "Error: shared memory requires an explicit request from the human to make this information available to other users",
+            nil
+        )
+        return
+    end
+
     local owner_id, identity_error =
         MemoryIdentity.owner_id(execution_context)
 
