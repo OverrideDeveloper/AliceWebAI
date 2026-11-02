@@ -1053,11 +1053,11 @@ end
 if cmd == "/reset" or
    cmd == "/clear-overrides" then
 
-    override_stack = {}
+    session.overrides = {}
 
     log(
         "INFO",
-        "Override stack cleared"
+        "Override stack cleared for " .. session.key
     )
 
     return command_result(
@@ -1105,12 +1105,13 @@ local function humanize_failure(message, provenance)
     return "Oh dear. I tried my best, but I could not complete that request reliably."
 end
 
-function Alice.process_user_input(
+local function process_user_input_now(
 user_input,
 callback,
 web_behaviors,
 identity,
-request_context
+request_context,
+session
 )
 if type(callback) ~= "function" then
 return nil,
@@ -1119,7 +1120,6 @@ end
 
 
 user_input = trim(user_input)
-local session = session_store:get(identity)
 
 if user_input == "" then
     callback(nil, "Message cannot be empty")
@@ -1322,9 +1322,102 @@ LLMClient.call(
 
 end
 
+local function run_next_session_request(session)
+    if session.busy then
+        return
+    end
+
+    local item = table.remove(session.pending, 1)
+    if not item then
+        return
+    end
+
+    session.busy = true
+    local completed = false
+
+    local function finish(response, err)
+        if completed then
+            return
+        end
+
+        completed = true
+
+        local callback_ok, callback_error =
+            pcall(item.callback, response, err)
+
+        if not callback_ok then
+            log("ERROR", "Session callback failed: " .. tostring(callback_error))
+        end
+
+        session.busy = false
+        run_next_session_request(session)
+    end
+
+    if item.request_context and item.request_context.closed == true then
+        finish(nil, "Request cancelled before processing")
+        return
+    end
+
+    local ok, run_error = pcall(item.run, finish)
+    if not ok then
+        finish(nil, tostring(run_error))
+    end
+end
+
+function Alice.process_user_input(
+    user_input,
+    callback,
+    web_behaviors,
+    identity,
+    request_context
+)
+    if type(callback) ~= "function" then
+        return nil, "process_user_input requires a callback"
+    end
+
+    local session = session_store:get(identity)
+
+    session.pending[#session.pending + 1] = {
+        request_context = request_context,
+        callback = callback,
+        run = function(done)
+            process_user_input_now(
+                user_input,
+                done,
+                web_behaviors,
+                identity,
+                request_context,
+                session
+            )
+        end,
+    }
+
+    run_next_session_request(session)
+end
+
 function Alice.cancel_request(request_id)
     local LLMClient = require("./llm_client")
-    return LLMClient.cancel(request_id)
+    local cancelled, cancel_error = LLMClient.cancel(request_id)
+
+    if cancelled then
+        return true
+    end
+
+    for _, key in ipairs(session_store.session_order) do
+        local session = session_store.sessions[key]
+
+        for index, item in ipairs(session.pending) do
+            if item.request_context
+                and item.request_context.request_id == request_id then
+                table.remove(session.pending, index)
+                item.request_context.closed = true
+                pcall(item.callback, nil, "Request cancelled before processing")
+                return true
+            end
+        end
+    end
+
+    return false, cancel_error
 end
 
 
