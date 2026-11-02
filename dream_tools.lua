@@ -256,6 +256,9 @@ local function make_child_context(session, turn_number, allowed_tool_names, reco
         provider = "dream",
     })
     context.inference_timeout = parent and parent.inference_timeout or nil
+    context.anonymous = parent and parent.anonymous == false and false or true
+    context.memory_owner_id = parent and parent.memory_owner_id or nil
+    context.shared_memory_authorized = false
     context.dream_turn = turn_number
     context.allowed_tool_names = allowed_tool_names or {}
     context.dream_record_tool_event = recorder
@@ -299,7 +302,8 @@ local function scheduled_memory_search(session, turn_number, callback)
     local ok, immediate_error = pcall(
         MemorySearch.search,
         {query = session.arguments.memory_search_query, count = 5},
-        finish
+        finish,
+        {request_context = session.parent_context}
     )
     if not ok then finish(nil, tostring(immediate_error)) end
 end
