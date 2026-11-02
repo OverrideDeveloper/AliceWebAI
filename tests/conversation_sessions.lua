@@ -110,6 +110,12 @@ assert(#kram.history == 2, "Alice reaching her history cap must not evict Kram's
 
 local flattened = store:flatten()
 assert(#flattened == 6, "Flattened persistence must include both users and quarantined legacy history")
+assert(
+    flattened[1].content == "Kram's private blackjack conversation"
+        and flattened[2].content == "Kram-specific reply"
+        and flattened[3].content == "Legacy message without identity",
+    "Flattened persistence must preserve the original cross-user message order"
+)
 
 local saw_legacy = false
 for _, message in ipairs(flattened) do
