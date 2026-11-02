@@ -1410,7 +1410,7 @@ function Alice.cancel_request(request_id)
             if item.request_context
                 and item.request_context.request_id == request_id then
                 table.remove(session.pending, index)
-                item.request_context.closed = true
+                Observability.complete(item.request_context, "cancelled_before_processing")
                 pcall(item.callback, nil, "Request cancelled before processing")
                 return true
             end
