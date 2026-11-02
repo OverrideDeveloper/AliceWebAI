@@ -1421,12 +1421,6 @@ function Alice.cancel_request(request_id)
 end
 
 
-function Alice.cancel_request(request_id)
-    local LLMClient = require("./llm_client")
-    return LLMClient.cancel(request_id)
-end
-
-
 function Alice.get_history(identity)
 return session_store:get(identity).history
 end
