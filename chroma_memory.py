@@ -67,10 +67,10 @@ class AliceMemory:
         owner_id: str | None = None,
     ) -> str:
         """
-        Generate a deterministic ID.
+        Generate a deterministic ID scoped by visibility and owner.
 
-        The same content/source/category combination produces
-        the same ID, making upsert safe and preventing duplicates.
+        Identical private facts belonging to different users receive
+        different IDs; deliberately shared facts use a common ID.
         """
 
         raw = (
