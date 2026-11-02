@@ -438,8 +438,8 @@ return true
 
 end
 
-local conversation_history = {}
-local override_stack = {}
+local ConversationSessions = require("./conversation_sessions")
+local session_store = ConversationSessions.new(MAX_HISTORY_MESSAGES)
 
 local loaded_history, history_error =
 load_conversation_history(HISTORY_FILE)
@@ -467,11 +467,11 @@ else
     )
 end
 
-local function message_count()
+local function message_count(session)
 local count = 0
 
 
-for _, message in ipairs(conversation_history) do
+for _, message in ipairs(session.history) do
     if message.role ~= "system_state" then
         count = count + 1
     end
@@ -483,41 +483,24 @@ return count
 end
 
 if loaded_history then
-for _, message in ipairs(loaded_history) do
-table.insert(
-conversation_history,
-message
-)
-end
-
-
-log(
-    "INFO",
-    string.format(
-        "Loaded %d messages from %s",
-        #conversation_history,
-        HISTORY_FILE
+    session_store:partition(loaded_history)
+    log(
+        "INFO",
+        string.format(
+            "Loaded %d messages across %d identity sessions from %s; %d unscoped legacy messages quarantined",
+            #loaded_history,
+            #session_store.session_order,
+            HISTORY_FILE,
+            #session_store.legacy_history
+        )
     )
-)
-
-
 else
-log("WARN", history_error)
-log("WARN", "Starting with empty conversation history")
+    log("WARN", history_error)
+    log("WARN", "Starting with empty conversation histories")
 end
 
-local function trim_history()
-while #conversation_history >
-MAX_HISTORY_MESSAGES do
-
-
-    table.remove(
-        conversation_history,
-        1
-    )
-end
-
-
+local function trim_history(session)
+    session_store:trim(session.history)
 end
 
 local function archive_copy(message)
@@ -544,7 +527,7 @@ local function reconcile_archive()
         end
     end
 
-    for _, message in ipairs(conversation_history) do
+    for _, message in ipairs(session_store:flatten()) do
         if message.archive_eligible ~= false
            and type(message.id) == "string"
            and message.id ~= ""
@@ -561,8 +544,8 @@ local function reconcile_archive()
 end
 
 local function save_history()
-    trim_history()
-
+    -- Persist a flat compatibility transcript; inference always selects
+    -- history from the request's identity-scoped session.
     -- Save the archive first. If active-history persistence then fails, the
     -- durable archive still contains the new message. If the archive write
     -- fails, the active history retains eligible IDs so startup can reconcile
@@ -592,7 +575,7 @@ local function save_history()
     local history_saved, history_save_error =
         save_conversation_history(
             HISTORY_FILE,
-            conversation_history
+            session_store:flatten()
         )
 
     if not history_saved then
@@ -610,6 +593,7 @@ if loaded_history then
 end
 
 local function add_message(
+session,
 role,
 content,
 extra_fields
@@ -635,36 +619,19 @@ end
 message.archive_eligible = true
 
 table.insert(
-    conversation_history,
+    session.history,
     message
 )
 
-trim_history()
+trim_history(session)
 end
 
-local function replace_history(new_history)
-for i = #conversation_history, 1, -1 do
-    conversation_history[i] = nil
+local function replace_history(session, new_history)
+    session_store:replace(session, new_history)
 end
 
-for _, message in ipairs(new_history or {}) do
-    -- Histories loaded from disk already carry an ID and archival eligibility
-    -- decision. Do not treat this replacement operation as message creation.
-    if type(message.id) ~= "string" or message.id == "" then
-        message.id = new_message_id()
-        message.archive_eligible = false
-    end
-
-    table.insert(
-        conversation_history,
-        message
-    )
-end
-
-trim_history()
-end
-
-local function recent_history()
+local function recent_history(session)
+local conversation_history = session.history
 local recent = {}
 
 
@@ -728,8 +695,9 @@ end
 
 end
 
-local function build_system_prompt()
+local function build_system_prompt(session)
 local prompt = base_system_prompt
+local override_stack = session.overrides
 
 
 if #override_stack > 0 then
@@ -759,7 +727,8 @@ return prompt
 
 end
 
-local function apply_handlers(user_input)
+local function apply_handlers(user_input, session)
+local override_stack = session.overrides
 local detection =
 ConversationHandler.detect_handler(
 user_input
@@ -771,7 +740,7 @@ if not detection then
 end
 
 if detection.type == "reset" then
-    override_stack = {}
+    session.overrides = {}
 
     log(
         "INFO",
@@ -856,9 +825,10 @@ local function build_request_system_prompt(
 web_behaviors,
 identity,
 current_request,
-request_id
+request_id,
+session
 )
-local prompt = build_system_prompt()
+local prompt = build_system_prompt(session)
 
 
 local web_overrides =
@@ -975,7 +945,9 @@ command = true
 }
 end
 
-local function handle_command(cmd, rest)
+local function handle_command(cmd, rest, session)
+local conversation_history = session.history
+local override_stack = session.overrides
 if cmd == "/history" then
 local output = {}
 
@@ -1051,7 +1023,7 @@ if cmd == "/history-load" then
         )
     end
 
-    replace_history(loaded)
+    replace_history(session, loaded)
 
     return command_result(
         string.format(
@@ -1063,8 +1035,8 @@ if cmd == "/history-load" then
 end
 
 if cmd == "/history-clear" then
-    replace_history({})
-    override_stack = {}
+    replace_history(session, {})
+    session.overrides = {}
 
     if save_history() then
         return command_result(
@@ -1147,6 +1119,7 @@ end
 
 
 user_input = trim(user_input)
+local session = session_store:get(identity)
 
 if user_input == "" then
     callback(nil, "Message cannot be empty")
@@ -1158,7 +1131,7 @@ local cmd, rest =
 
 if cmd then
     local result =
-        handle_command(cmd, rest)
+        handle_command(cmd, rest, session)
 
     if result then
         callback(
@@ -1171,9 +1144,10 @@ if cmd then
 end
 
 local handler_result =
-    apply_handlers(user_input)
+    apply_handlers(user_input, session)
 
 add_message(
+    session,
     "user",
     user_input,
     {
@@ -1218,11 +1192,12 @@ local system_prompt =
         web_behaviors,
         identity,
         user_input,
-        request_context.request_id
+        request_context.request_id,
+        session
     )
 
 Observability.log("request_start", request_context, {
-    message_count = message_count(),
+    message_count = message_count(session),
     input_bytes = #user_input,
 })
 
@@ -1233,7 +1208,7 @@ log(
 
 LLMClient.call(
     system_prompt,
-    recent_history(),
+    recent_history(session),
     available_tools,
     function(response, err, provenance)
 
@@ -1299,6 +1274,7 @@ LLMClient.call(
         )
 
         add_message(
+            session,
             "assistant",
             response,
             {
@@ -1358,20 +1334,27 @@ function Alice.cancel_request(request_id)
 end
 
 
-function Alice.get_history()
-return conversation_history
+function Alice.get_history(identity)
+return session_store:get(identity).history
 end
 
-function Alice.get_recent_history()
-return recent_history()
+function Alice.get_recent_history(identity)
+return recent_history(session_store:get(identity))
 end
 
 function Alice.add_message(
 role,
 content,
-extra_fields
+extra_fields,
+identity
 )
+local session = session_store:get(identity or {
+    user_id = extra_fields and extra_fields.user_id,
+    provider = extra_fields and extra_fields.user_provider,
+    name = extra_fields and extra_fields.user_name,
+})
 add_message(
+session,
 role,
 content,
 extra_fields
@@ -1385,12 +1368,12 @@ if not save_history() then
 end
 end
 
-function Alice.get_overrides()
-return override_stack
+function Alice.get_overrides(identity)
+return session_store:get(identity).overrides
 end
 
-function Alice.clear_overrides()
-override_stack = {}
+function Alice.clear_overrides(identity)
+session_store:get(identity).overrides = {}
 end
 
 return Alice
