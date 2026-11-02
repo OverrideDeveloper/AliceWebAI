@@ -26,8 +26,9 @@ local M = {}
 
 local MemoryClient = require("./memory_client")
 local Policy = require("./policy")
+local MemoryIdentity = require("./memory_identity")
 
-function M.store(arguments, callback, source)
+function M.store(arguments, callback, source, execution_context)
     if type(arguments) ~= "table" then
         arguments = {}
     end
@@ -54,6 +55,23 @@ function M.store(arguments, callback, source)
     source =
         tostring(source or "unknown")
 
+    local scope = tostring(arguments.scope or "user")
+    if scope ~= "user" and scope ~= "shared" then
+        callback(
+            "Error: memory scope must be 'user' or 'shared'; system memory is reserved for trusted Alice operations",
+            nil
+        )
+        return
+    end
+
+    local owner_id, identity_error =
+        MemoryIdentity.owner_id(execution_context)
+
+    if not owner_id then
+        callback("Error: " .. tostring(identity_error), nil)
+        return
+    end
+
     local category =
         tostring(arguments.category or "general")
 
@@ -61,6 +79,8 @@ function M.store(arguments, callback, source)
         content,
         source,
         category,
+        scope,
+        owner_id,
         arguments.metadata or {},
         function(result, err)
 
@@ -112,6 +132,16 @@ M.definition = {
                     description =
                         "A category such as architecture, project, "
                         .. "preference, or general."
+                },
+
+                scope = {
+                    type = "string",
+                    enum = {"user", "shared"},
+                    description =
+                        "Memory visibility. Defaults to user (private to the current user). "
+                        .. "Use shared only when the human explicitly asks for information "
+                        .. "to be available to other Alice users. System memory is reserved "
+                        .. "for trusted Alice operations."
                 },
 
                 user_requested = {
