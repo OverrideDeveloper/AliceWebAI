@@ -52,7 +52,16 @@ function Sessions.new(max_messages)
         session_order = {},
         legacy_history = {},
         max_messages = max_messages or 128,
+        sequence = 0,
+        message_order = setmetatable({}, {__mode = "k"}),
     }
+
+    function store:register(message)
+        if not self.message_order[message] then
+            self.sequence = self.sequence + 1
+            self.message_order[message] = self.sequence
+        end
+    end
 
     function store:get(identity)
         local key = Sessions.identity_key(identity)
@@ -74,6 +83,8 @@ function Sessions.new(max_messages)
     function store:partition(records)
         for _, message in ipairs(records or {}) do
             local key = record_identity_key(message)
+
+            self:register(message)
 
             if key then
                 local session = self.sessions[key]
@@ -119,6 +130,13 @@ function Sessions.new(max_messages)
             end
         end
 
+        -- Keep the flat compatibility file and archive in original
+        -- cross-user request order, rather than grouping by session.
+        table.sort(records, function(left, right)
+            return (self.message_order[left] or 0)
+                < (self.message_order[right] or 0)
+        end)
+
         return records
     end
 
@@ -127,6 +145,7 @@ function Sessions.new(max_messages)
 
         for _, message in ipairs(records or {}) do
             if record_identity_key(message) == session.key then
+                self:register(message)
                 session.history[#session.history + 1] = message
             end
         end
