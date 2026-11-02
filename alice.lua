@@ -1239,12 +1239,18 @@ local explicitly_shared =
     or lower_input:find("save this in shared memory", 1, true) ~= nil
     or lower_input:find("share this with other users", 1, true) ~= nil
     or lower_input:find("make this available to everyone", 1, true) ~= nil
-    or lower_input:find("for all users", 1, true) ~= nil
+    or lower_input:find("make this available to all users", 1, true) ~= nil
+    or lower_input:find("store this for all users", 1, true) ~= nil
 
 local rejects_shared =
     lower_input:find("not in shared memory", 1, true) ~= nil
     or lower_input:find("don't use shared memory", 1, true) ~= nil
     or lower_input:find("do not use shared memory", 1, true) ~= nil
+    or lower_input:find("don't store this in shared memory", 1, true) ~= nil
+    or lower_input:find("do not store this in shared memory", 1, true) ~= nil
+    or lower_input:find("don't save this in shared memory", 1, true) ~= nil
+    or lower_input:find("do not save this in shared memory", 1, true) ~= nil
+    or lower_input:find("not for all users", 1, true) ~= nil
 
 request_context.shared_memory_authorized =
     explicitly_shared and not rejects_shared
