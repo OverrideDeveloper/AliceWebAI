@@ -26,8 +26,9 @@
 local M = {}
 
 local MemoryClient = require("./memory_client")
+local MemoryIdentity = require("./memory_identity")
 
-function M.search(arguments, callback)
+function M.search(arguments, callback, execution_context)
 
     if type(arguments) ~= "table" then
         arguments = {}
@@ -66,10 +67,19 @@ function M.search(arguments, callback)
     local category =
         arguments.category
 
+    local owner_id, identity_error =
+        MemoryIdentity.owner_id(execution_context)
+
+    if not owner_id then
+        callback("Error: " .. tostring(identity_error), nil)
+        return
+    end
+
     MemoryClient.search(
         query,
         count,
         category,
+        owner_id,
         function(result, err)
 
             if err then
