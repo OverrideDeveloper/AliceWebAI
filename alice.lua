@@ -65,6 +65,30 @@ DreamTools.summary_definition,
 VMExecution.definition
 }
 
+local function tools_for_request(request_context)
+    local anonymous = request_context.anonymous == true
+    local tools = {}
+    local allowed = {}
+
+    for _, definition in ipairs(available_tools) do
+        local function_definition = definition["function"] or {}
+        local name = function_definition.name
+        local blocked = anonymous and (
+            name == "memory_search"
+            or name == "memory_store"
+            or name == "vm_execute"
+        )
+
+        if type(name) == "string" and not blocked then
+            tools[#tools + 1] = definition
+            allowed[name] = true
+        end
+    end
+
+    request_context.allowed_tool_names = allowed
+    return tools
+end
+
 local Alice = {}
 
 local HISTORY_FILE = os.getenv("ALICE_CONVERSATION_HISTORY_FILE") or "conversation_history.json"
@@ -1189,6 +1213,36 @@ request_context = request_context or Observability.new_context({
     provider = identity and identity.provider or nil,
 })
 
+-- Interface identity is the sole authority for memory ownership.
+request_context.user_id =
+    identity and (identity.id or identity.user_id) or nil
+request_context.provider =
+    identity and identity.provider or nil
+request_context.anonymous =
+    not identity or identity.anonymous == true
+
+if request_context.anonymous == false
+   and type(request_context.provider) == "string"
+   and request_context.provider ~= ""
+   and type(request_context.user_id) == "string"
+   and request_context.user_id ~= "" then
+    request_context.memory_owner_id =
+        request_context.provider .. ":" .. request_context.user_id
+else
+    request_context.memory_owner_id = nil
+end
+
+-- Shared memory requires explicit wording in the current human request.
+local lower_input = tostring(user_input or ""):lower()
+request_context.shared_memory_authorized =
+    lower_input:find("shared memory", 1, true) ~= nil
+    or lower_input:find("share this memory", 1, true) ~= nil
+    or lower_input:find("available to everyone", 1, true) ~= nil
+    or lower_input:find("for all users", 1, true) ~= nil
+    or lower_input:find("everyone using alice", 1, true) ~= nil
+
+local request_tools = tools_for_request(request_context)
+
 local system_prompt =
     build_request_system_prompt(
         web_behaviors,
@@ -1211,7 +1265,7 @@ log(
 LLMClient.call(
     system_prompt,
     recent_history(session),
-    available_tools,
+    request_tools,
     function(response, err, provenance)
 
         if err then
