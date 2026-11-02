@@ -1234,12 +1234,20 @@ end
 
 -- Shared memory requires explicit wording in the current human request.
 local lower_input = tostring(user_input or ""):lower()
-request_context.shared_memory_authorized =
-    lower_input:find("shared memory", 1, true) ~= nil
-    or lower_input:find("share this memory", 1, true) ~= nil
-    or lower_input:find("available to everyone", 1, true) ~= nil
+local explicitly_shared =
+    lower_input:find("store this in shared memory", 1, true) ~= nil
+    or lower_input:find("save this in shared memory", 1, true) ~= nil
+    or lower_input:find("share this with other users", 1, true) ~= nil
+    or lower_input:find("make this available to everyone", 1, true) ~= nil
     or lower_input:find("for all users", 1, true) ~= nil
-    or lower_input:find("everyone using alice", 1, true) ~= nil
+
+local rejects_shared =
+    lower_input:find("not in shared memory", 1, true) ~= nil
+    or lower_input:find("don't use shared memory", 1, true) ~= nil
+    or lower_input:find("do not use shared memory", 1, true) ~= nil
+
+request_context.shared_memory_authorized =
+    explicitly_shared and not rejects_shared
 
 local request_tools = tools_for_request(request_context)
 
