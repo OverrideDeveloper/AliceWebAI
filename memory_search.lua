@@ -143,6 +143,16 @@ function M.search(arguments, callback, execution_context)
                     )
                 end
 
+                if metadata.scope then
+                    table.insert(
+                        output,
+                        "   Scope: "
+                            .. tostring(
+                                metadata.scope
+                            )
+                    )
+                end
+
                 if memory.distance then
                     table.insert(
                         output,
