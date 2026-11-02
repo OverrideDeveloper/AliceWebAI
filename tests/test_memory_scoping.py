@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
-
-from chroma_memory import AliceMemory
+remove unused test importfrom chroma_memory import AliceMemory
 
 
 class FakeCollection:
@@ -37,6 +35,34 @@ class MemoryScopingTests(unittest.TestCase):
             "same fact", "web", "general", "user", "discord:two"
         )
         self.assertNotEqual(first, second)
+
+    def test_private_store_requires_owner(self):
+        with self.assertRaises(ValueError):
+            self.memory.store(
+                content="unowned private fact",
+                scope="user",
+                owner_id=None,
+            )
+
+    def test_invalid_scope_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.memory.store(
+                content="invalid scope",
+                scope="legacy_unclassified",
+                owner_id="discord:one",
+            )
+
+    def test_shared_store_has_no_private_owner(self):
+        result = self.memory.store(
+            content="shared fact",
+            source="web",
+            category="general",
+            scope="shared",
+            owner_id="discord:one",
+        )
+        metadata = self.memory.collection.upserts[0]["metadatas"][0]
+        self.assertEqual(metadata["scope"], "shared")
+        self.assertNotIn("owner_id", metadata)
 
     def test_scope_changes_record_id(self):
         private = AliceMemory.make_id(
