@@ -614,6 +614,8 @@ if type(message.id) ~= "string" or message.id == "" then
     message.id = new_message_id()
 end
 
+session_store:register(message)
+
 -- Newly created messages are eligible for archival. Legacy messages loaded
 -- from the previous active history are explicitly marked archive_eligible=false.
 message.archive_eligible = true
